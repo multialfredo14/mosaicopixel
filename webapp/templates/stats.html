@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel de estadísticas</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root{--bg:#0f1117;--panel:#1a1d27;--border:#2a2d3a;--ink:#e4e6ed;
+    --soft:#8b8fa3;--accent:#6c8aff;--green:#34d399;--orange:#fb923c;--red:#f87171}
+  *{box-sizing:border-box;margin:0}
+  body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);
+    color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:24px 20px 60px}
+  h1{font-size:20px;font-weight:700;margin-bottom:4px}
+  .sub{color:var(--soft);font-size:13px;margin-bottom:24px}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:28px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  .card .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--soft);margin-bottom:6px}
+  .card .value{font-size:28px;font-weight:700}
+  .card .value.accent{color:var(--accent)}
+  .card .value.green{color:var(--green)}
+  .card .value.orange{color:var(--orange)}
+
+  .cols{display:grid;grid-template-columns:280px 1fr;gap:20px;align-items:start}
+  @media(max-width:780px){.cols{grid-template-columns:1fr}}
+
+  .section{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .section h2{font-size:13px;font-weight:600;padding:14px 16px;border-bottom:1px solid var(--border);
+    color:var(--soft);text-transform:uppercase;letter-spacing:.06em}
+  .top-list{padding:8px 16px 16px}
+  .top-item{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+  .top-item:last-child{border:none}
+  .top-item .cfg{font-weight:600;font-family:monospace;font-size:14px}
+  .top-item .n{color:var(--soft)}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;padding:10px 12px;color:var(--soft);font-weight:600;font-size:11px;
+    text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);
+    position:sticky;top:0;background:var(--panel)}
+  td{padding:8px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
+  tr:hover td{background:rgba(108,138,255,.06)}
+  .action-pdf{color:var(--green);font-weight:600}
+  .action-preview{color:var(--soft)}
+  .table-scroll{max-height:600px;overflow-y:auto}
+  .mono{font-family:monospace;font-size:12px}
+  .ua{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--soft)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Panel de Estadísticas — Mosaico Pixel</h1>
+  <p class="sub">Datos de uso del sistema. URL privada, no indexada.</p>
+
+  <div class="cards">
+    <div class="card">
+      <div class="label">PDFs generados</div>
+      <div class="value accent">{{ total_pdfs }}</div>
+    </div>
+    <div class="card">
+      <div class="label">Vistas previas</div>
+      <div class="value">{{ total_previews }}</div>
+    </div>
+    <div class="card">
+      <div class="label">PDFs hoy</div>
+      <div class="value green">{{ pdfs_today }}</div>
+    </div>
+    <div class="card">
+      <div class="label">IPs únicas</div>
+      <div class="value orange">{{ unique_ips }}</div>
+    </div>
+    <div class="card">
+      <div class="label">Piezas totales</div>
+      <div class="value">{{ "{:,}".format(total_pieces) }}</div>
+    </div>
+    <div class="card">
+      <div class="label">Tiempo prom. PDF</div>
+      <div class="value">{{ avg_time }}s</div>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="section">
+      <h2>Configuraciones más usadas</h2>
+      <div class="top-list">
+        {% for row in top_configs %}
+        <div class="top-item">
+          <span class="cfg">{{ row.cfg }}</span>
+          <span class="n">{{ row.n }} PDFs</span>
+        </div>
+        {% endfor %}
+        {% if not top_configs %}
+        <p style="padding:12px 0;color:var(--soft)">Sin datos aún</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Actividad reciente (últimos 50)</h2>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha/hora</th>
+              <th>Acción</th>
+              <th>IP</th>
+              <th>Placas</th>
+              <th>Colores</th>
+              <th>Piezas</th>
+              <th>Nombre</th>
+              <th>Medidas</th>
+              <th>Tiempo</th>
+              <th>Navegador</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in recent %}
+            <tr>
+              <td class="mono">{{ e.ts }}</td>
+              <td><span class="action-{{ e.action }}">{{ e.action|upper }}</span></td>
+              <td class="mono">{{ e.ip }}</td>
+              <td>{{ e.cols }}×{{ e.rows }} ({{ e.boards }})</td>
+              <td>{{ e.colors }}</td>
+              <td>{{ "{:,}".format(e.pieces) }}</td>
+              <td>{{ e.name or '—' }}</td>
+              <td>{{ e.size_cm }} cm</td>
+              <td>{{ e.elapsed }}s</td>
+              <td class="ua" title="{{ e.user_agent }}">{{ e.user_agent[:50] }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
