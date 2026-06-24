@@ -84,7 +84,7 @@ def generate_pdf():
     buf = io.BytesIO()
     build_pdf(m, buf, name=name)
     buf.seek(0)
-    fname = (name.replace(" ", "_") or "pictobrix") + "_instructivo.pdf"
+    fname = (name.replace(" ", "_") or "mosaico_pixel") + "_instructivo.pdf"
     return send_file(buf, mimetype="application/pdf",
                      as_attachment=True, download_name=fname)
 

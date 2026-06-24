@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PIC·TO·BRIX — Generador de instructivos</title>
+<title>Mosaico Pixel — Generador de instructivos</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='cropper.min.css') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -136,9 +136,9 @@
 
   <header>
     <div class="brand">
-      <div class="logo"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <img src="{{ url_for('static', filename='logo_mosaico_pixel.jpeg') }}" alt="Mosaico Pixel" style="height:54px;border-radius:8px">
       <div>
-        <div class="wordmark">PIC·TO·BRIX</div>
+        <div class="wordmark">MOSAICO PIXEL</div>
         <div class="eyebrow">Generador de instructivos</div>
       </div>
     </div>
@@ -228,7 +228,7 @@
 
   </div>
 
-  <p class="footer">Sistema PicToBrix · motor de mosaico + PDF en Python (Pillow · reportlab)</p>
+  <p class="footer">Mosaico Pixel · motor de mosaico + PDF en Python</p>
 </div>
 
 <script src="{{ url_for('static', filename='cropper.min.js') }}"></script>
@@ -365,7 +365,7 @@ $('btnPdf').onclick=async()=>{
     const blob=await res.blob();
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
-    a.href=url; a.download=(($('name').value.trim()||'pictobrix')+'_instructivo.pdf').replace(/\s+/g,'_');
+    a.href=url; a.download=(($('name').value.trim()||'mosaico_pixel')+'_instructivo.pdf').replace(/\s+/g,'_');
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   }catch(e){ alert('No se pudo generar el PDF. Revisa la consola del servidor.'); }
   $('btnPdf').textContent=old; $('btnPdf').disabled=false;
