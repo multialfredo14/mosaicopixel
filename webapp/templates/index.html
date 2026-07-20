@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mosaico Pixel — Generador de instructivos</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='cropper.min.css') }}">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16202e; --ink-soft:#54627a; --line:#d8dee8;
+    --bg:#eef1f5; --panel:#ffffff; --stud:#e3e8f0;
+    --accent:#1f5fcc; --accent-d:#17439a; --accent-soft:#e7eefb;
+    --ok:#1d7a4d; --shadow:0 1px 0 rgba(22,32,46,.04),0 8px 28px rgba(22,32,46,.07);
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:"Inter",system-ui,sans-serif;color:var(--ink);
+    background:
+      radial-gradient(var(--stud) 1.6px,transparent 1.7px) 0 0/16px 16px,
+      var(--bg);
+    background-attachment:fixed;
+    line-height:1.5;-webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:26px 20px 60px}
+
+  /* Header */
+  header{display:flex;align-items:flex-end;justify-content:space-between;
+    gap:16px;flex-wrap:wrap;margin-bottom:22px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{display:grid;grid-template-columns:repeat(3,7px);grid-auto-rows:7px;
+    gap:2px;padding:7px;background:var(--ink);border-radius:8px}
+  .logo i{display:block;width:7px;height:7px;border-radius:50%;
+    background:#3a4a63}
+  .logo i:nth-child(1),.logo i:nth-child(5),.logo i:nth-child(9){background:var(--accent)}
+  .logo i:nth-child(3){background:#e0922a}
+  .wordmark{font-family:"Space Grotesk",sans-serif;font-weight:700;
+    letter-spacing:.16em;font-size:18px}
+  .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11px;
+    letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft)}
+  h1{font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:clamp(22px,3.2vw,30px);
+    margin:2px 0 0;letter-spacing:-.01em}
+  .tag{font-size:13px;color:var(--ink-soft);max-width:42ch}
+
+  /* Layout */
+  .grid{display:grid;grid-template-columns:380px 1fr;gap:20px;align-items:start}
+  @media(max-width:880px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+    box-shadow:var(--shadow)}
+  .panel + .panel{margin-top:18px}
+  .panel h2{font-family:"Space Grotesk",sans-serif;font-size:13px;letter-spacing:.04em;
+    margin:0;padding:14px 18px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:9px}
+  .step{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;
+    color:#fff;background:var(--ink);border-radius:6px;padding:2px 7px}
+  .body{padding:16px 18px}
+
+  /* Upload */
+  .drop{border:1.5px dashed var(--line);border-radius:12px;padding:22px;text-align:center;
+    cursor:pointer;transition:.15s;background:#fafbfd}
+  .drop:hover{border-color:var(--accent);background:var(--accent-soft)}
+  .drop strong{color:var(--accent)}
+  .drop small{display:block;color:var(--ink-soft);margin-top:4px;font-size:12px}
+  input[type=file]{display:none}
+
+  /* Plate picker */
+  .presets{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-top:4px}
+  .plate{border:1px solid var(--line);background:#fafbfd;border-radius:10px;padding:9px 6px 7px;
+    cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;transition:.12s}
+  .plate:hover{border-color:var(--accent)}
+  .plate.sel{border-color:var(--accent);background:var(--accent-soft);
+    box-shadow:inset 0 0 0 1px var(--accent)}
+  .mini{display:grid;gap:2px}
+  .mini span{width:8px;height:8px;border-radius:2px;background:var(--accent);
+    opacity:.85;position:relative}
+  .mini span::after{content:"";position:absolute;inset:2px;border-radius:50%;
+    background:rgba(255,255,255,.55)}
+  .plate b{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600}
+
+  .custom{display:flex;gap:10px;margin-top:12px;align-items:flex-end;flex-wrap:wrap}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:11px;letter-spacing:.04em;color:var(--ink-soft);
+    text-transform:uppercase;font-family:"IBM Plex Mono",monospace}
+  input[type=number],input[type=text]{font:inherit;border:1px solid var(--line);
+    border-radius:9px;padding:8px 10px;width:84px;background:#fff;color:var(--ink)}
+  input[type=text]{width:100%}
+  input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .orient{display:flex;gap:6px}
+  .orient button{font:inherit;font-size:12px;border:1px solid var(--line);background:#fff;
+    border-radius:8px;padding:8px 10px;cursor:pointer}
+  .orient button.sel{border-color:var(--accent);background:var(--accent-soft)}
+
+  /* Stats readout */
+  .readout{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px;
+    display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;
+    font-family:"IBM Plex Mono",monospace;font-size:12.5px}
+  .readout div{display:flex;justify-content:space-between;gap:8px}
+  .readout span{color:var(--ink-soft)}
+  .readout b{font-weight:600}
+
+  /* Buttons */
+  .actions{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+  .btn{font:inherit;font-weight:600;border-radius:10px;padding:11px 16px;cursor:pointer;
+    border:1px solid var(--line);background:#fff;color:var(--ink);transition:.12s}
+  .btn:hover{border-color:var(--accent)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:var(--accent-d)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+
+  /* Stage */
+  .stage{min-height:420px;display:flex;align-items:center;justify-content:center;
+    padding:14px}
+  .stage .hint{color:var(--ink-soft);font-size:14px;text-align:center;max-width:34ch}
+  #cropArea{max-width:100%;width:100%}
+  #src{max-width:100%;display:block}
+  .preview-wrap{display:flex;flex-direction:column;align-items:center;gap:12px;width:100%}
+  .preview-wrap img{max-width:100%;max-height:560px;border-radius:8px;
+    box-shadow:var(--shadow);image-rendering:pixelated}
+  .tabs{display:flex;gap:6px;padding:12px 14px 0}
+  .tab{font:inherit;font-size:12.5px;border:1px solid var(--line);border-bottom:none;
+    background:#f3f5f9;border-radius:9px 9px 0 0;padding:8px 14px;cursor:pointer;color:var(--ink-soft)}
+  .tab.sel{background:#fff;color:var(--ink);font-weight:600}
+  .spin{width:22px;height:22px;border:3px solid var(--accent-soft);
+    border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .note{font-size:12.5px;color:var(--ink-soft);font-family:"IBM Plex Mono",monospace}
+  .footer{margin-top:26px;font-size:12px;color:var(--ink-soft);text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <img src="{{ url_for('static', filename='logo_mosaico_pixel.jpeg') }}" alt="Mosaico Pixel" style="height:54px;border-radius:8px">
+      <div>
+        <div class="wordmark">MOSAICO PIXEL</div>
+        <div class="eyebrow">Generador de instructivos</div>
+      </div>
+    </div>
+    <div>
+      <h1>De la foto a la placa</h1>
+      <p class="tag">Sube una foto, encuádrala con la proporción de tus placas y descarga el instructivo en PDF.</p>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- COLUMNA DE CONTROLES -->
+    <div>
+      <section class="panel">
+        <h2><span class="step">1</span> Foto</h2>
+        <div class="body">
+          <div class="drop" id="drop">
+            Arrastra o <strong>elige una imagen</strong>
+            <small>JPG o PNG · se recorta sin perder calidad</small>
+            <input type="file" id="file" accept="image/*">
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2><span class="step">2</span> Placas y forma</h2>
+        <div class="body">
+          <div class="presets" id="presets"></div>
+
+          <div class="custom">
+            <div class="field">
+              <label>Columnas</label>
+              <input type="number" id="cols" min="1" max="10" value="3">
+            </div>
+            <div class="field">
+              <label>Filas</label>
+              <input type="number" id="rows" min="1" max="10" value="3">
+            </div>
+            <div class="field">
+              <label>Orientación</label>
+              <div class="orient">
+                <button data-o="h" id="oH">Horizontal</button>
+                <button data-o="v" id="oV">Vertical</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="readout">
+            <div><span>Placas</span><b id="rBoards">9</b></div>
+            <div><span>Piezas</span><b id="rPieces">9216</b></div>
+            <div><span>Medidas</span><b id="rSize">76.8 × 76.8 cm</b></div>
+            <div><span>Páginas</span><b id="rPages">10</b></div>
+          </div>
+          <p class="note" style="margin:10px 0 0">Cada placa = 32×32 px = {{ '%.1f'|format(plate_cm) }}×{{ '%.1f'|format(plate_cm) }} cm = {{ pieces_per_plate }} piezas.</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2><span class="step">3</span> Detalles</h2>
+        <div class="body">
+          <div class="field" style="margin-bottom:12px">
+            <label>Colores (leyenda)</label>
+            <input type="number" id="colors" min="2" max="40" value="26" style="width:84px">
+          </div>
+          <div class="field">
+            <label>Nombre (opcional)</label>
+            <input type="text" id="name" placeholder="Ej. Jose y esposa">
+          </div>
+          <div class="actions">
+            <button class="btn" id="btnPrev" disabled>Vista previa</button>
+            <button class="btn primary" id="btnPdf" disabled>Generar PDF</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- COLUMNA DE LIENZO -->
+    <section class="panel">
+      <div class="tabs">
+        <button class="tab sel" id="tabCrop">Encuadre</button>
+        <button class="tab" id="tabPrev">Mosaico</button>
+      </div>
+      <div class="stage" id="stage">
+        <p class="hint">Sube una foto para empezar. El recorte se ajusta solo a la proporción de las placas que elijas.</p>
+      </div>
+    </section>
+
+  </div>
+
+  <p class="footer">Mosaico Pixel · motor de mosaico + PDF en Python</p>
+</div>
+
+<script src="{{ url_for('static', filename='cropper.min.js') }}"></script>
+<script>
+const PLATE_CM = {{ plate_cm }};
+let cropper = null, hasImage = false, lastPreview = null;
+
+const $ = id => document.getElementById(id);
+const colsI = $('cols'), rowsI = $('rows');
+
+// ---- Presets de placas (cada uno dibuja una mini-placa con studs) ----
+const PRESETS = [[1,1],[2,1],[1,2],[2,2],[3,2],[2,3],[3,3],[4,3]];
+const presetsEl = $('presets');
+PRESETS.forEach(([c,r])=>{
+  const b=document.createElement('div'); b.className='plate'; b.dataset.c=c; b.dataset.r=r;
+  const mini=document.createElement('div'); mini.className='mini';
+  const u=10; // tamano mini segun proporcion
+  mini.style.gridTemplateColumns=`repeat(${c},8px)`;
+  for(let i=0;i<c*r;i++){mini.appendChild(document.createElement('span'));}
+  const lbl=document.createElement('b'); lbl.textContent=`${c}×${r}`;
+  b.appendChild(mini); b.appendChild(lbl);
+  b.onclick=()=>{colsI.value=c; rowsI.value=r; sync(true);};
+  presetsEl.appendChild(b);
+});
+
+function aspect(){return (+colsI.value)/(+rowsI.value);}
+
+function markPreset(){
+  document.querySelectorAll('.plate').forEach(p=>{
+    p.classList.toggle('sel', +p.dataset.c===+colsI.value && +p.dataset.r===+rowsI.value);
+  });
+  $('oH').classList.toggle('sel', +colsI.value>=+rowsI.value);
+  $('oV').classList.toggle('sel', +colsI.value<+rowsI.value);
+}
+
+function stats(){
+  const c=+colsI.value, r=+rowsI.value;
+  $('rBoards').textContent=c*r;
+  $('rPieces').textContent=(c*32*r*32).toLocaleString('es-MX');
+  $('rSize').textContent=`${(c*PLATE_CM).toFixed(1)} × ${(r*PLATE_CM).toFixed(1)} cm`;
+  $('rPages').textContent=1+c*r;
+}
+
+function sync(){
+  colsI.value=Math.max(1,Math.min(10,+colsI.value||1));
+  rowsI.value=Math.max(1,Math.min(10,+rowsI.value||1));
+  markPreset(); stats();
+  if(cropper) cropper.setAspectRatio(aspect());
+}
+colsI.oninput=sync; rowsI.oninput=sync;
+$('oH').onclick=()=>{ if(+colsI.value<+rowsI.value){[colsI.value,rowsI.value]=[rowsI.value,colsI.value];} sync(); };
+$('oV').onclick=()=>{ if(+colsI.value>=+rowsI.value){[colsI.value,rowsI.value]=[rowsI.value,colsI.value];} sync(); };
+
+// ---- Carga de imagen ----
+const drop=$('drop'), fileI=$('file');
+drop.onclick=()=>fileI.click();
+drop.ondragover=e=>{e.preventDefault();drop.style.borderColor='var(--accent)';};
+drop.ondragleave=()=>drop.style.borderColor='';
+drop.ondrop=e=>{e.preventDefault();drop.style.borderColor='';if(e.dataTransfer.files[0])loadFile(e.dataTransfer.files[0]);};
+fileI.onchange=e=>{if(e.target.files[0])loadFile(e.target.files[0]);};
+
+function loadFile(f){
+  const rd=new FileReader();
+  rd.onload=()=>{
+    showCrop(rd.result);
+    hasImage=true; $('btnPrev').disabled=false; $('btnPdf').disabled=false;
+  };
+  rd.readAsDataURL(f);
+}
+
+function showCrop(dataUrl){
+  selTab('crop');
+  const stage=$('stage'); stage.innerHTML='';
+  const div=document.createElement('div'); div.id='cropArea';
+  const img=document.createElement('img'); img.id='src'; img.src=dataUrl;
+  div.appendChild(img); stage.appendChild(div);
+  if(cropper) cropper.destroy();
+  cropper=new Cropper(img,{aspectRatio:aspect(),viewMode:1,autoCropArea:1,background:false});
+}
+
+function selTab(which){
+  $('tabCrop').classList.toggle('sel',which==='crop');
+  $('tabPrev').classList.toggle('sel',which==='prev');
+}
+$('tabCrop').onclick=()=>{ if(hasImage){selTab('crop');} };
+$('tabPrev').onclick=()=>{ if(lastPreview){renderPreview(lastPreview);} else if(hasImage){$('btnPrev').click();} };
+
+function croppedDataUrl(){
+  const c=+colsI.value, r=+rowsI.value;
+  const canvas=cropper.getCroppedCanvas({width:c*32*8, height:r*32*8,
+    imageSmoothingQuality:'high'});
+  return canvas.toDataURL('image/png');
+}
+
+function payload(){
+  return JSON.stringify({
+    image:croppedDataUrl(), cols:+colsI.value, rows:+rowsI.value,
+    colors:+$('colors').value, name:$('name').value
+  });
+}
+
+function busy(msg){
+  selTab('prev');
+  $('stage').innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+    <div class="spin"></div><p class="note">${msg}</p></div>`;
+}
+
+// ---- Vista previa ----
+$('btnPrev').onclick=async()=>{
+  if(!hasImage)return;
+  busy('Construyendo el mosaico…');
+  try{
+    const res=await fetch('/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:payload()});
+    const d=await res.json();
+    lastPreview=d; renderPreview(d);
+  }catch(e){ $('stage').innerHTML='<p class="hint">No se pudo generar la vista previa. Revisa la consola del servidor.</p>'; }
+};
+
+function renderPreview(d){
+  selTab('prev');
+  $('stage').innerHTML=`<div class="preview-wrap">
+    <img src="${d.preview}">
+    <p class="note">${d.boards} placas · ${d.pieces.toLocaleString('es-MX')} piezas · ${d.colors} colores · ${d.width_cm} × ${d.height_cm} cm</p>
+  </div>`;
+}
+
+// ---- Generar PDF ----
+$('btnPdf').onclick=async()=>{
+  if(!hasImage)return;
+  const old=$('btnPdf').textContent; $('btnPdf').textContent='Generando…'; $('btnPdf').disabled=true;
+  try{
+    const res=await fetch('/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:payload()});
+    if(!res.ok){ const t=await res.text(); console.error(t); throw new Error('Server error '+res.status); }
+    const blob=await res.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download=(($('name').value.trim()||'mosaico_pixel')+'_instructivo.pdf').replace(/\s+/g,'_');
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }catch(e){ alert('No se pudo generar el PDF. Revisa la consola del servidor.'); }
+  $('btnPdf').textContent=old; $('btnPdf').disabled=false;
+};
+
+sync();
+</script>
+</body>
+</html>
