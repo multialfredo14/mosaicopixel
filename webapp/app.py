@@ -40,8 +40,17 @@ app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024  # 30 MB
 
 # ---------------------------------------------------------------------------
 # Base de datos de estadísticas
+#
+# Si se define DATA_DIR (p.ej. apuntando a un volumen persistente de
+# Railway), la base vive ahi y sobrevive a los redeploys. Sin esa variable
+# (desarrollo local) se guarda junto al codigo, como antes.
 # ---------------------------------------------------------------------------
-_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stats.db")
+_DATA_DIR = os.environ.get("DATA_DIR")
+if _DATA_DIR:
+    os.makedirs(_DATA_DIR, exist_ok=True)
+    _DB_PATH = os.path.join(_DATA_DIR, "stats.db")
+else:
+    _DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stats.db")
 
 
 def _db():

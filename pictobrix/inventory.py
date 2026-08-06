@@ -20,7 +20,15 @@ from datetime import datetime, timezone
 
 from . import palette as pal
 
-_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inventory.db")
+# Si se define DATA_DIR (p.ej. un volumen persistente de Railway), el
+# inventario vive ahi y sobrevive a los redeploys. Sin esa variable
+# (desarrollo local) se guarda junto al paquete, como antes.
+_DATA_DIR = os.environ.get("DATA_DIR")
+if _DATA_DIR:
+    os.makedirs(_DATA_DIR, exist_ok=True)
+    _DB_PATH = os.path.join(_DATA_DIR, "inventory.db")
+else:
+    _DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inventory.db")
 
 
 def _conn() -> sqlite3.Connection:
