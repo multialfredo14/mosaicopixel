@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inventario de piezas</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root{--bg:#0f1117;--panel:#1a1d27;--border:#2a2d3a;--ink:#e4e6ed;
+    --soft:#8b8fa3;--accent:#6c8aff;--green:#34d399;--orange:#fb923c;--red:#f87171}
+  *{box-sizing:border-box;margin:0}
+  body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);
+    color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:24px 20px 60px}
+  h1{font-size:20px;font-weight:700;margin-bottom:4px}
+  .sub{color:var(--soft);font-size:13px;margin-bottom:8px}
+  .nav{margin-bottom:24px}
+  .nav a{color:var(--accent);font-size:13px;text-decoration:none}
+  .nav a:hover{text-decoration:underline}
+
+  .cols{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}
+  @media(max-width:900px){.cols{grid-template-columns:1fr}}
+
+  .section{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px}
+  .section h2{font-size:13px;font-weight:600;padding:14px 16px;border-bottom:1px solid var(--border);
+    color:var(--soft);text-transform:uppercase;letter-spacing:.06em}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{text-align:left;padding:10px 12px;color:var(--soft);font-weight:600;font-size:11px;
+    text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);
+    position:sticky;top:0;background:var(--panel)}
+  td{padding:8px 12px;border-bottom:1px solid var(--border);white-space:nowrap}
+  tr:hover td{background:rgba(108,138,255,.06)}
+  .table-scroll{max-height:640px;overflow-y:auto}
+  .swatch{display:inline-block;width:16px;height:16px;border-radius:4px;
+    vertical-align:middle;margin-right:8px;border:1px solid rgba(255,255,255,.15)}
+  .qty{font-weight:700;font-family:monospace}
+  .qty.zero{color:var(--red)}
+  .qty.low{color:var(--orange)}
+  .qty.ok{color:var(--green)}
+  .unmanaged{color:var(--soft);font-style:italic}
+  form.addrow{display:flex;gap:6px;align-items:center}
+  form.addrow input[type=number]{width:70px;background:#11131b;border:1px solid var(--border);
+    border-radius:6px;color:var(--ink);padding:4px 6px;font:inherit}
+  form.addrow button{background:var(--accent);border:none;border-radius:6px;color:#0b0c10;
+    font-weight:700;padding:5px 10px;cursor:pointer;font-size:12px}
+  form.addrow button:hover{opacity:.9}
+
+  .field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+  .field label{font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.05em}
+  select,input[type=text],input[type=number]{background:#11131b;border:1px solid var(--border);
+    border-radius:8px;color:var(--ink);padding:8px 10px;font:inherit;width:100%}
+  .btn-primary{background:var(--accent);border:none;border-radius:8px;color:#0b0c10;
+    font-weight:700;padding:10px 14px;cursor:pointer;font:inherit;width:100%}
+  .btn-primary:hover{opacity:.9}
+  .mono{font-family:monospace;font-size:12px}
+  .delta-pos{color:var(--green);font-weight:700}
+  .delta-neg{color:var(--red);font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Inventario de Piezas — Mosaico Pixel</h1>
+  <p class="sub">Stock fisico por color/pieza. Un color sin gestionar se considera sin limite hasta que le agregues piezas.</p>
+  <p class="nav"><a href="{{ url_for('stats_panel') }}">&larr; Panel de estadísticas</a></p>
+
+  <div class="cols">
+    <div>
+      <div class="section">
+        <h2>Stock por color ({{ colors|length }})</h2>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Color / pieza</th>
+                <th>Disponible</th>
+                <th>Agregar piezas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for c in colors %}
+              <tr>
+                <td>
+                  <span class="swatch" style="background:rgb({{ c.rgb }})"></span>{{ c.name }}
+                </td>
+                <td>
+                  {% if not c.managed %}
+                    <span class="unmanaged">sin gestionar</span>
+                  {% elif c.quantity == 0 %}
+                    <span class="qty zero">0</span>
+                  {% elif c.quantity < 20 %}
+                    <span class="qty low">{{ c.quantity }}</span>
+                  {% else %}
+                    <span class="qty ok">{{ c.quantity }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <form class="addrow" method="post" action="{{ url_for('inventory_add') }}">
+                    <input type="hidden" name="color_index" value="{{ c.index }}">
+                    <input type="number" name="quantity" min="1" value="50" required>
+                    <button type="submit">+ Agregar</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section">
+        <h2>Agregar con nota</h2>
+        <div style="padding:16px">
+          <form method="post" action="{{ url_for('inventory_add') }}">
+            <div class="field">
+              <label>Color / pieza</label>
+              <select name="color_index" required>
+                {% for n in names %}
+                <option value="{{ loop.index0 }}">{{ n }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <label>Cantidad a agregar</label>
+              <input type="number" name="quantity" min="1" value="100" required>
+            </div>
+            <div class="field">
+              <label>Nota (opcional)</label>
+              <input type="text" name="note" placeholder="Ej. compra proveedor X">
+            </div>
+            <button class="btn-primary" type="submit">Agregar al inventario</button>
+          </form>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Movimientos recientes</h2>
+        <div class="table-scroll" style="max-height:400px">
+          <table>
+            <thead>
+              <tr><th>Fecha</th><th>Color</th><th>Cambio</th><th>Motivo</th></tr>
+            </thead>
+            <tbody>
+              {% for m in movements %}
+              <tr>
+                <td class="mono">{{ m.ts[5:16] }}</td>
+                <td>{{ names[m.color_index] }}</td>
+                <td class="{{ 'delta-pos' if m.delta > 0 else 'delta-neg' }}">
+                  {{ '+%d'|format(m.delta) if m.delta > 0 else m.delta }}
+                </td>
+                <td>{{ m.reason }}{% if m.note %} · {{ m.note }}{% endif %}</td>
+              </tr>
+              {% endfor %}
+              {% if not movements %}
+              <tr><td colspan="4" style="color:var(--soft)">Sin movimientos aún</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

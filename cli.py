@@ -29,6 +29,9 @@ def main():
     ap.add_argument("--crop", choices=["cover", "contain"], default="cover",
                     help="cover = recorta centrado; contain = rellena sin recortar.")
     ap.add_argument("--name", default="", help="Nombre que aparece en el cuadro de datos.")
+    ap.add_argument("--sell", action="store_true",
+                    help="Concreta la venta: arma el mosaico respetando el inventario "
+                         "disponible y descuenta las piezas usadas al terminar.")
     args = ap.parse_args()
 
     max_colors = None if args.colors <= 0 else args.colors
@@ -37,6 +40,7 @@ def main():
             args.imagen, args.salida,
             cols=args.cols, rows=args.rows,
             max_colors=max_colors, crop_mode=args.crop, name=args.name,
+            confirm_sale=args.sell,
         )
     except FileNotFoundError:
         print(f"No se encontro la imagen: {args.imagen}", file=sys.stderr)

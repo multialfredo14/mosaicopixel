@@ -16,6 +16,7 @@ Ejecutar:
 """
 
 import base64
+import functools
 import io
 import os
 import sqlite3
@@ -26,11 +27,13 @@ from datetime import datetime, timezone
 # permitir importar el paquete pictobrix de la carpeta superior
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, Response, render_template, request, jsonify, send_file, redirect, url_for
 from PIL import Image
 
 from pictobrix.processor import build_mosaic, render_preview, PLATE, PLATE_CM, PIECES_PER_PLATE
 from pictobrix.pdf_builder import build_pdf
+from pictobrix import palette as pal
+from pictobrix import inventory as inv
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024  # 30 MB
@@ -119,7 +122,9 @@ def index():
 def preview():
     img, cols, rows, max_colors, name = _params(request)
     t0 = time.time()
-    m = build_mosaic(img, cols=cols, rows=rows, max_colors=max_colors, pre_cropped=True)
+    capacities = inv.get_capacities()
+    m = build_mosaic(img, cols=cols, rows=rows, max_colors=max_colors,
+                     pre_cropped=True, capacities=capacities)
     prev = render_preview(m, block=8)
     elapsed = time.time() - t0
     _log_event("preview", cols, rows, m, name, elapsed)
@@ -139,11 +144,17 @@ def preview():
 
 @app.route("/generate", methods=["POST"])
 def generate_pdf():
+    """Genera el PDF final. Esto concreta la venta del mosaico: se arma
+    respetando el inventario disponible y, al terminar, se descuentan las
+    piezas usadas automaticamente."""
     img, cols, rows, max_colors, name = _params(request)
     t0 = time.time()
-    m = build_mosaic(img, cols=cols, rows=rows, max_colors=max_colors, pre_cropped=True)
+    capacities = inv.get_capacities()
+    m = build_mosaic(img, cols=cols, rows=rows, max_colors=max_colors,
+                     pre_cropped=True, capacities=capacities)
     buf = io.BytesIO()
     build_pdf(m, buf, name=name)
+    inv.deduct_for_mosaic(m.counts, reason="venta", note=name)
     elapsed = time.time() - t0
     _log_event("pdf", cols, rows, m, name, elapsed)
     buf.seek(0)
@@ -153,9 +164,27 @@ def generate_pdf():
 
 
 # ---------------------------------------------------------------------------
-# Panel de estadísticas (URL oculta)
+# Paneles de administracion (URL oculta). Si se define la variable de
+# entorno ADMIN_PASSWORD, se exige HTTP Basic Auth para entrar; si no,
+# quedan abiertos (igual que antes) solo por oscuridad de la URL.
 # ---------------------------------------------------------------------------
+def _admin_required(view):
+    @functools.wraps(view)
+    def wrapped(*args, **kwargs):
+        password = os.environ.get("ADMIN_PASSWORD")
+        if password:
+            auth = request.authorization
+            if not auth or auth.password != password:
+                return Response(
+                    "Autenticacion requerida", 401,
+                    {"WWW-Authenticate": 'Basic realm="Mosaico Pixel Admin"'},
+                )
+        return view(*args, **kwargs)
+    return wrapped
+
+
 @app.route("/mx-panel-2026")
+@_admin_required
 def stats_panel():
     conn = _db()
 
@@ -202,6 +231,47 @@ def stats_panel():
                            pdfs_today=pdfs_today,
                            top_configs=top_configs,
                            recent=recent)
+
+
+# ---------------------------------------------------------------------------
+# Panel de inventario (URL oculta)
+# ---------------------------------------------------------------------------
+@app.route("/mx-panel-2026/inventario")
+@_admin_required
+def inventory_panel():
+    stock = inv.get_all_stock()
+    names = pal.palette_names()
+    rgb = pal.palette_rgb()
+    colors = [
+        {
+            "index": i,
+            "name": names[i],
+            "rgb": f"{rgb[i][0]},{rgb[i][1]},{rgb[i][2]}",
+            "quantity": stock.get(i),
+            "managed": i in stock,
+        }
+        for i in range(len(names))
+    ]
+    movements = inv.recent_movements(50)
+    return render_template("inventory.html", colors=colors, movements=movements, names=names)
+
+
+@app.route("/mx-panel-2026/inventario/agregar", methods=["POST"])
+@_admin_required
+def inventory_add():
+    try:
+        color_index = int(request.form["color_index"])
+        quantity = int(request.form["quantity"])
+    except (KeyError, ValueError):
+        return "Datos invalidos", 400
+    if quantity <= 0:
+        return "La cantidad a agregar debe ser mayor a 0", 400
+    note = (request.form.get("note") or "").strip()
+    try:
+        inv.add_stock(color_index, quantity, note=note)
+    except ValueError as e:
+        return str(e), 400
+    return redirect(url_for("inventory_panel"))
 
 
 if __name__ == "__main__":

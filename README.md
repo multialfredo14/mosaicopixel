@@ -101,6 +101,28 @@ print(m.n_boards, m.total_pieces, m.n_colors, m.width_cm, m.height_cm)
 
 ---
 
+## Inventario de piezas
+
+El sistema lleva un inventario físico de piezas por color/símbolo
+(`pictobrix/inventory.py`, respaldado en SQLite).
+
+- **Agregar piezas**: panel web en `/mx-panel-2026/inventario` (misma URL
+  oculta del panel de estadísticas), o por código con
+  `pictobrix.inventory.add_stock(color_index, cantidad)`.
+- **Descuento automático**: cada vez que se genera el PDF final desde la web
+  (botón "Generar PDF") o con `cli.py ... --sell`, se considera que la venta
+  del mosaico se concretó: se descuentan del inventario las piezas usadas.
+- **Sin stock suficiente**: si un color se agota (o nunca tuvo stock
+  suficiente), el mosaico se arma igual usando el color disponible más
+  parecido — nunca falla por falta de piezas.
+- Un color **sin ningún registro** en el inventario se considera sin límite
+  (no se restringe) hasta que se le agregue stock por primera vez.
+- Protección opcional: si defines la variable de entorno `ADMIN_PASSWORD`,
+  los paneles `/mx-panel-2026*` piden usuario/contraseña (HTTP Basic Auth).
+  Sin esa variable, quedan abiertos como antes (solo por URL oculta).
+
+---
+
 ## Estructura
 
 ```

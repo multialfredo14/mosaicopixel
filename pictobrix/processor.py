@@ -91,6 +91,7 @@ def build_mosaic(
     max_colors: int | None = 26,
     crop_mode: str = "cover",
     pre_cropped: bool = False,
+    capacities: dict[int, int | None] | None = None,
 ) -> Mosaic:
     """
     img        : imagen PIL de origen (RGB).
@@ -99,6 +100,10 @@ def build_mosaic(
     crop_mode  : 'cover' (recorta) o 'contain' (rellena). Ignorado si pre_cropped.
     pre_cropped: True si la imagen ya viene encuadrada con la proporcion correcta
                  (p.ej. recortada en la interfaz web). Solo se reescala.
+    capacities : indice de paleta -> piezas disponibles en inventario (None = sin
+                 limite). Si se provee, el mosaico se arma respetando el stock:
+                 los pixeles que no caben en su color mas parecido se reasignan
+                 al siguiente color disponible (ver palette.nearest_indices_with_capacity).
     """
     img = img.convert("RGB")
     if not pre_cropped:
@@ -108,7 +113,10 @@ def build_mosaic(
     small = img.resize((W, H), Image.LANCZOS)
     arr = np.asarray(small, dtype=np.uint8).reshape(-1, 3)
 
-    idx = pal.nearest_palette_indices(arr).reshape(H, W)
+    if capacities is not None:
+        idx = pal.nearest_indices_with_capacity(arr, capacities).reshape(H, W)
+    else:
+        idx = pal.nearest_palette_indices(arr).reshape(H, W)
 
     if max_colors is not None:
         idx = _limit_colors(idx, max_colors)

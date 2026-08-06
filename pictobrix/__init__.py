@@ -14,9 +14,10 @@ from PIL import Image
 
 from .processor import build_mosaic, render_preview, Mosaic, PLATE, PLATE_CM, PIECES_PER_PLATE
 from .pdf_builder import build_pdf
+from . import inventory
 
 __all__ = [
-    "generate", "build_mosaic", "build_pdf", "render_preview",
+    "generate", "build_mosaic", "build_pdf", "render_preview", "inventory",
     "Mosaic", "PLATE", "PLATE_CM", "PIECES_PER_PLATE",
 ]
 
@@ -30,15 +31,25 @@ def generate(
     crop_mode: str = "cover",
     name: str = "",
     pre_cropped: bool = False,
+    confirm_sale: bool = False,
 ) -> Mosaic:
     """
     Convierte image_path en mosaico (cols x rows placas) y escribe out_pdf.
     Devuelve el objeto Mosaic (por si quieres datos o vista previa).
+
+    confirm_sale: si es True, el mosaico se arma respetando el inventario de
+                  piezas disponible (usando el color mas parecido que si haya
+                  stock cuando un color se agota) y, al terminar, descuenta
+                  del inventario las piezas usadas -- como si se concretara
+                  la venta de este mosaico.
     """
     img = Image.open(image_path)
+    capacities = inventory.get_capacities() if confirm_sale else None
     mosaic = build_mosaic(
         img, cols=cols, rows=rows, max_colors=max_colors,
-        crop_mode=crop_mode, pre_cropped=pre_cropped,
+        crop_mode=crop_mode, pre_cropped=pre_cropped, capacities=capacities,
     )
     build_pdf(mosaic, out_pdf, name=name)
+    if confirm_sale:
+        inventory.deduct_for_mosaic(mosaic.counts, reason="venta", note=name)
     return mosaic

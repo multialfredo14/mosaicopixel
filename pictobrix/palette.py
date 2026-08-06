@@ -100,5 +100,50 @@ def nearest_palette_indices(pixels_rgb: np.ndarray) -> np.ndarray:
     return np.argmin(d, axis=1)
 
 
+def nearest_indices_with_capacity(
+    pixels_rgb: np.ndarray, capacities: dict[int, int | None]
+) -> np.ndarray:
+    """
+    Como nearest_palette_indices, pero respeta un maximo de piezas
+    disponibles por color (capacities: indice de paleta -> cantidad, o
+    None si ese color no tiene limite).
+
+    Los pixeles que no caben en su color mas cercano por falta de stock se
+    reasignan al siguiente color mas parecido que todavia tenga piezas
+    disponibles ("worst fit first": se reubican primero los pixeles peor
+    emparejados con el color saturado, dejando los mejor emparejados donde
+    estan). Si el stock total no alcanza para todos los pixeles, se hace lo
+    mejor posible con lo disponible.
+    """
+    lab = rgb_to_lab(pixels_rgb.reshape(-1, 3))
+    d = np.linalg.norm(lab[:, None, :] - _PALETTE_LAB[None, :, :], axis=2)  # (n, k)
+    n, k = d.shape
+    order = np.argsort(d, axis=1)  # preferencia por pixel, mejor primero
+
+    unlimited = np.array([capacities.get(i) is None for i in range(k)])
+    remaining = np.array(
+        [capacities.get(i) if capacities.get(i) is not None else n for i in range(k)],
+        dtype=np.int64,
+    )
+
+    rank = np.zeros(n, dtype=np.int64)
+    assigned = order[:, 0].copy()
+
+    for _ in range(k):
+        counts = np.bincount(assigned, minlength=k)
+        over = np.where((~unlimited) & (counts > remaining))[0]
+        if len(over) == 0:
+            break
+        for col in over:
+            idxs = np.where(assigned == col)[0]
+            excess = int(counts[col] - remaining[col])
+            d_col = d[idxs, col]
+            worst = idxs[np.argsort(-d_col)][:excess]
+            rank[worst] = np.minimum(rank[worst] + 1, k - 1)
+            assigned[worst] = order[worst, rank[worst]]
+
+    return assigned
+
+
 def palette_lab() -> np.ndarray:
     return _PALETTE_LAB
