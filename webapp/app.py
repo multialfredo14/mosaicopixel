@@ -34,6 +34,7 @@ from pictobrix.processor import build_mosaic, render_preview, PLATE, PLATE_CM, P
 from pictobrix.pdf_builder import build_pdf
 from pictobrix import palette as pal
 from pictobrix import inventory as inv
+from pictobrix import icons
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024  # 30 MB
@@ -148,6 +149,10 @@ def preview():
         "width_cm": round(m.width_cm, 1),
         "height_cm": round(m.height_cm, 1),
         "pages": 1 + m.n_boards,
+        # el mosaico solo usa los colores que existen en el inventario
+        "stock_limited": not inv.is_empty(),
+        "stock_colors": len(inv.available_stock()),
+        "stock_missing": sum(inv.shortage_for(m.counts).values()),
     })
 
 
@@ -163,13 +168,17 @@ def generate_pdf():
                      pre_cropped=True, capacities=capacities)
     buf = io.BytesIO()
     build_pdf(m, buf, name=name)
+    # el faltante se mide contra el inventario de antes de descontar la venta
+    missing = sum(inv.shortage_for(m.counts).values())
     inv.deduct_for_mosaic(m.counts, reason="venta", note=name)
     elapsed = time.time() - t0
     _log_event("pdf", cols, rows, m, name, elapsed)
     buf.seek(0)
     fname = (name.replace(" ", "_") or "mosaico_pixel") + "_instructivo.pdf"
-    return send_file(buf, mimetype="application/pdf",
+    resp = send_file(buf, mimetype="application/pdf",
                      as_attachment=True, download_name=fname)
+    resp.headers["X-Stock-Missing"] = str(missing)
+    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -258,26 +267,93 @@ def inventory_panel():
             "rgb": f"{rgb[i][0]},{rgb[i][1]},{rgb[i][2]}",
             "quantity": stock.get(i),
             "managed": i in stock,
+            "available": stock.get(i, 0) > 0,
+            "icon_url": url_for("inventory_icon", idx=i, v=icons.icon_version(i)),
         }
         for i in range(len(names))
     ]
     movements = inv.recent_movements(50)
-    return render_template("inventory.html", colors=colors, movements=movements, names=names)
+    return render_template(
+        "inventory.html",
+        colors=colors,
+        movements=movements,
+        names=names,
+        empty=inv.is_empty(),
+        n_available=sum(1 for c in colors if c["available"]),
+        total_pieces=sum(stock.values()),
+    )
+
+
+@app.route("/mx-panel-2026/inventario/icono/<int:idx>.png")
+def inventory_icon(idx):
+    """
+    Imagen de la pieza (el icono PicToBrix de ese color) para el panel.
+    La URL lleva `?v=` (ver icons.icon_version), asi que se puede cachear
+    fuerte: si se cambia el archivo del icono, cambia la URL.
+    """
+    try:
+        png = icons.icon_png(idx, size=96)
+    except ValueError:
+        return "Not found", 404
+    return Response(png, mimetype="image/png",
+                    headers={"Cache-Control": "public, max-age=31536000, immutable"})
+
+
+def _stock_form():
+    """(color_index, cantidad, nota) del formulario, o None si vienen mal."""
+    try:
+        return (
+            int(request.form["color_index"]),
+            int(request.form["quantity"]),
+            (request.form.get("note") or "").strip(),
+        )
+    except (KeyError, ValueError):
+        return None
 
 
 @app.route("/mx-panel-2026/inventario/agregar", methods=["POST"])
 @_admin_required
 def inventory_add():
-    try:
-        color_index = int(request.form["color_index"])
-        quantity = int(request.form["quantity"])
-    except (KeyError, ValueError):
+    data = _stock_form()
+    if data is None:
         return "Datos invalidos", 400
+    color_index, quantity, note = data
     if quantity <= 0:
         return "La cantidad a agregar debe ser mayor a 0", 400
-    note = (request.form.get("note") or "").strip()
     try:
         inv.add_stock(color_index, quantity, note=note)
+    except ValueError as e:
+        return str(e), 400
+    return redirect(url_for("inventory_panel"))
+
+
+@app.route("/mx-panel-2026/inventario/quitar", methods=["POST"])
+@_admin_required
+def inventory_remove():
+    """Descuento manual: corrige una captura equivocada, piezas rotas, etc."""
+    data = _stock_form()
+    if data is None:
+        return "Datos invalidos", 400
+    color_index, quantity, note = data
+    if quantity <= 0:
+        return "La cantidad a quitar debe ser mayor a 0", 400
+    try:
+        inv.remove_stock(color_index, quantity, note=note)
+    except ValueError as e:
+        return str(e), 400
+    return redirect(url_for("inventory_panel"))
+
+
+@app.route("/mx-panel-2026/inventario/fijar", methods=["POST"])
+@_admin_required
+def inventory_set():
+    """Deja el color en una cantidad exacta, sin importar lo que hubiera."""
+    data = _stock_form()
+    if data is None:
+        return "Datos invalidos", 400
+    color_index, quantity, note = data
+    try:
+        inv.set_stock(color_index, quantity, note=note)
     except ValueError as e:
         return str(e), 400
     return redirect(url_for("inventory_panel"))

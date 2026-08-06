@@ -128,6 +128,7 @@
     border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
   .note{font-size:12.5px;color:var(--ink-soft);font-family:"IBM Plex Mono",monospace}
+  .note.warn{color:#a4530b}
   .footer{margin-top:26px;font-size:12px;color:var(--ink-soft);text-align:center}
   .version-badge{position:fixed;right:14px;bottom:12px;font-family:"IBM Plex Mono",monospace;
     font-size:11px;letter-spacing:.03em;color:var(--ink-soft);background:var(--panel);
@@ -235,7 +236,7 @@
   <p class="footer">Mosaico Pixel · motor de mosaico + PDF en Python</p>
 </div>
 
-<div class="version-badge">v2026.07.20</div>
+<div class="version-badge">v2026.08.05</div>
 
 <script src="{{ url_for('static', filename='cropper.min.js') }}"></script>
 <script>
@@ -355,9 +356,17 @@ $('btnPrev').onclick=async()=>{
 
 function renderPreview(d){
   selTab('prev');
+  // el mosaico se arma solo con las piezas que hay en inventario
+  let stock='';
+  if(d.stock_missing>0){
+    stock=`<p class="note warn">Faltan ${d.stock_missing.toLocaleString('es-MX')} piezas en el inventario para armar este mosaico completo.</p>`;
+  }else if(d.stock_limited){
+    stock=`<p class="note">Armado con las piezas en existencia · ${d.stock_colors} colores disponibles en inventario.</p>`;
+  }
   $('stage').innerHTML=`<div class="preview-wrap">
     <img src="${d.preview}">
     <p class="note">${d.boards} placas · ${d.pieces.toLocaleString('es-MX')} piezas · ${d.colors} colores · ${d.width_cm} × ${d.height_cm} cm</p>
+    ${stock}
   </div>`;
 }
 
@@ -368,11 +377,16 @@ $('btnPdf').onclick=async()=>{
   try{
     const res=await fetch('/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:payload()});
     if(!res.ok){ const t=await res.text(); console.error(t); throw new Error('Server error '+res.status); }
+    const missing=+(res.headers.get('X-Stock-Missing')||0);
     const blob=await res.blob();
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
     a.href=url; a.download=(($('name').value.trim()||'mosaico_pixel')+'_instructivo.pdf').replace(/\s+/g,'_');
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    if(missing>0){
+      alert(`El instructivo se generó con las piezas disponibles, pero faltan `+
+            `${missing.toLocaleString('es-MX')} piezas en el inventario para armarlo completo.`);
+    }
   }catch(e){ alert('No se pudo generar el PDF. Revisa la consola del servidor.'); }
   $('btnPdf').textContent=old; $('btnPdf').disabled=false;
 };

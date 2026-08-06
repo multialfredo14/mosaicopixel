@@ -101,9 +101,10 @@ def build_mosaic(
     pre_cropped: True si la imagen ya viene encuadrada con la proporcion correcta
                  (p.ej. recortada en la interfaz web). Solo se reescala.
     capacities : indice de paleta -> piezas disponibles en inventario (None = sin
-                 limite). Si se provee, el mosaico se arma respetando el stock:
-                 los pixeles que no caben en su color mas parecido se reasignan
-                 al siguiente color disponible (ver palette.nearest_indices_with_capacity).
+                 limite, 0 = color no disponible, no se usa). Si se provee, el
+                 mosaico se arma respetando el stock: los pixeles que no caben en
+                 su color mas parecido se reasignan al siguiente color disponible
+                 (ver palette.nearest_indices_with_capacity).
     """
     img = img.convert("RGB")
     if not pre_cropped:
@@ -120,6 +121,16 @@ def build_mosaic(
 
     if max_colors is not None:
         idx = _limit_colors(idx, max_colors)
+        if capacities is not None and _exceeds(idx, capacities):
+            # Fusionar colores puede dejar a un color sobre su stock: se
+            # reparte otra vez, permitiendo solo los colores que sobrevivieron
+            # a la reduccion (los demas quedan en capacidad 0).
+            survivors = {int(v) for v in np.unique(idx)}
+            caps = {
+                i: (capacities.get(i) if i in survivors else 0)
+                for i in range(len(pal.PALETTE))
+            }
+            idx = pal.nearest_indices_with_capacity(arr, caps).reshape(H, W)
 
     counts = _count(idx)
     used = sorted(counts.keys(), key=lambda k: counts[k], reverse=True)
@@ -129,6 +140,14 @@ def build_mosaic(
 def _count(idx: np.ndarray) -> dict[int, int]:
     vals, cts = np.unique(idx, return_counts=True)
     return {int(v): int(c) for v, c in zip(vals, cts)}
+
+
+def _exceeds(idx: np.ndarray, capacities: dict[int, int | None]) -> bool:
+    """True si algun color de la cuadricula pasa las piezas disponibles."""
+    return any(
+        capacities.get(pidx) is not None and used > capacities[pidx]
+        for pidx, used in _count(idx).items()
+    )
 
 
 def _limit_colors(idx: np.ndarray, max_colors: int) -> np.ndarray:

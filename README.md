@@ -85,6 +85,8 @@ Opciones:
 | `--colors` | máximo de colores en la leyenda (`0` = sin límite) | 26 |
 | `--crop` | `cover` (recorta centrado) o `contain` (rellena) | cover |
 | `--name` | nombre en el cuadro de datos | — |
+| `--sell` | descuenta del inventario las piezas usadas | off |
+| `--ignore-stock` | usa la paleta completa, sin limitarse al inventario | off |
 
 ---
 
@@ -108,15 +110,26 @@ El sistema lleva un inventario físico de piezas por color/símbolo
 
 - **Agregar piezas**: panel web en `/mx-panel-2026/inventario` (misma URL
   oculta del panel de estadísticas), o por código con
-  `pictobrix.inventory.add_stock(color_index, cantidad)`.
+  `pictobrix.inventory.add_stock(color_index, cantidad)`. Cada renglón muestra
+  la **imagen real de la pieza** (sombrilla, calabaza, pato, …), tomada de
+  `iconos/NN-nombre.jpeg` — ver `pictobrix/icons.py`.
+- **Corregir a mano**: cada renglón trae "− Quitar" para descontar piezas
+  (`inventory.remove_stock`, nunca baja de 0) y la tarjeta lateral agrega
+  "= Fijar", que deja el color en una cantidad exacta sin importar lo que
+  tuviera (`inventory.set_stock`) — la forma rápida de arreglar una captura
+  equivocada. Ambos quedan registrados como movimiento `ajuste`.
+- **Sólo se usa lo que existe**: si un color no está en el inventario (o se
+  quedó en 0), no se usa en el mosaico ni aparece en el PDF; sus pixeles se
+  pintan con el color disponible más parecido. Un color con stock tampoco se
+  usa más allá de las piezas que tenga.
 - **Descuento automático**: cada vez que se genera el PDF final desde la web
   (botón "Generar PDF") o con `cli.py ... --sell`, se considera que la venta
   del mosaico se concretó: se descuentan del inventario las piezas usadas.
-- **Sin stock suficiente**: si un color se agota (o nunca tuvo stock
-  suficiente), el mosaico se arma igual usando el color disponible más
-  parecido — nunca falla por falta de piezas.
-- Un color **sin ningún registro** en el inventario se considera sin límite
-  (no se restringe) hasta que se le agregue stock por primera vez.
+- **Sin stock suficiente**: si las piezas disponibles no alcanzan para todo el
+  mosaico, se arma igual con lo que hay (nunca falla) y la vista previa avisa
+  cuántas piezas faltan.
+- **Inventario vacío**: mientras no se haya cargado ningún color se usan los 40
+  colores de la paleta, para poder trabajar desde el primer día.
 - Protección opcional: si defines la variable de entorno `ADMIN_PASSWORD`,
   los paneles `/mx-panel-2026*` piden usuario/contraseña (HTTP Basic Auth).
   Sin esa variable, quedan abiertos como antes (solo por URL oculta).
@@ -131,10 +144,15 @@ pictobrix_system/
 │   ├── palette.py             # paleta de colores + emparejamiento Lab
 │   ├── symbols.py             # símbolos vectoriales por color
 │   ├── processor.py           # recorte / reescala / cuantización a mosaico
+│   ├── inventory.py           # inventario de piezas (SQLite)
+│   ├── icons.py               # imagen real de cada pieza (carpeta iconos/)
+│   ├── icon_render.py         # respaldo: símbolo del PDF rasterizado
 │   └── pdf_builder.py         # generación del PDF (portada + placas)
+├── iconos/                    # NN-nombre.jpeg, un icono por color de paleta
 ├── webapp/
 │   ├── app.py                 # servidor Flask
 │   ├── templates/index.html   # interfaz (subir, encuadrar, previsualizar)
+│   ├── templates/inventory.html  # panel de inventario
 │   └── static/                # Cropper.js incluido
 ├── cli.py                     # interfaz de línea de comandos
 ├── requirements.txt

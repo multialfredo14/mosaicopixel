@@ -13,7 +13,7 @@ El arreglo cols x rows define la forma (vertical u horizontal).
 
 import argparse
 import sys
-from pictobrix import generate, PLATE_CM, PIECES_PER_PLATE
+from pictobrix import generate, inventory, PLATE_CM, PIECES_PER_PLATE
 
 
 def main():
@@ -30,8 +30,11 @@ def main():
                     help="cover = recorta centrado; contain = rellena sin recortar.")
     ap.add_argument("--name", default="", help="Nombre que aparece en el cuadro de datos.")
     ap.add_argument("--sell", action="store_true",
-                    help="Concreta la venta: arma el mosaico respetando el inventario "
-                         "disponible y descuenta las piezas usadas al terminar.")
+                    help="Concreta la venta: descuenta del inventario las piezas "
+                         "usadas por el mosaico al terminar.")
+    ap.add_argument("--ignore-stock", action="store_true",
+                    help="Usa los 40 colores de la paleta, sin limitarse a las "
+                         "piezas que hay en el inventario.")
     args = ap.parse_args()
 
     max_colors = None if args.colors <= 0 else args.colors
@@ -40,7 +43,7 @@ def main():
             args.imagen, args.salida,
             cols=args.cols, rows=args.rows,
             max_colors=max_colors, crop_mode=args.crop, name=args.name,
-            confirm_sale=args.sell,
+            confirm_sale=args.sell, use_inventory=not args.ignore_stock,
         )
     except FileNotFoundError:
         print(f"No se encontro la imagen: {args.imagen}", file=sys.stderr)
@@ -52,6 +55,12 @@ def main():
     print(f"  Colores: {m.n_colors}")
     print(f"  Medidas: {m.width_cm:.1f} x {m.height_cm:.1f} cm  ({PLATE_CM} cm por placa)")
     print(f"  Paginas: {1 + m.n_boards}")
+
+    if not args.ignore_stock:
+        missing = inventory.shortage_for(m.counts)
+        if missing:
+            print(f"  Aviso: faltan {sum(missing.values())} piezas en el inventario "
+                  f"para armar este mosaico completo.")
 
 
 if __name__ == "__main__":

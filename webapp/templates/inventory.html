@@ -34,6 +34,18 @@
   .table-scroll{max-height:640px;overflow-y:auto}
   .swatch{display:inline-block;width:16px;height:16px;border-radius:4px;
     vertical-align:middle;margin-right:8px;border:1px solid rgba(255,255,255,.15)}
+  .icon{display:inline-block;width:48px;height:48px;border-radius:8px;
+    vertical-align:middle;margin-right:10px;border:1px solid rgba(255,255,255,.15)}
+  .icon-lg{width:112px;height:112px;border-radius:12px;border:1px solid rgba(255,255,255,.15);
+    display:block;margin:0 auto 10px}
+  /* la figura siempre se ve a color; la falta de stock se marca en el texto */
+  tr.off td:first-child{color:var(--soft)}
+  .summary{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:var(--soft);
+    margin-bottom:14px}
+  .summary b{color:var(--ink);font-family:monospace;font-size:13px}
+  .banner{background:rgba(251,146,60,.12);border:1px solid rgba(251,146,60,.4);
+    border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--orange);
+    margin-bottom:18px}
   .qty{font-weight:700;font-family:monospace}
   .qty.zero{color:var(--red)}
   .qty.low{color:var(--orange)}
@@ -45,6 +57,8 @@
   form.addrow button{background:var(--accent);border:none;border-radius:6px;color:#0b0c10;
     font-weight:700;padding:5px 10px;cursor:pointer;font-size:12px}
   form.addrow button:hover{opacity:.9}
+  form.addrow button.minus{background:transparent;border:1px solid var(--border);color:var(--ink)}
+  form.addrow button.minus:hover{border-color:var(--red);color:var(--red);opacity:1}
 
   .field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
   .field label{font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.05em}
@@ -53,6 +67,12 @@
   .btn-primary{background:var(--accent);border:none;border-radius:8px;color:#0b0c10;
     font-weight:700;padding:10px 14px;cursor:pointer;font:inherit;width:100%}
   .btn-primary:hover{opacity:.9}
+  .btn-row{display:flex;gap:8px}
+  .btn-row .btn-primary{flex:1.4}
+  .btn-alt{flex:1;background:transparent;border:1px solid var(--border);border-radius:8px;
+    color:var(--ink);font-weight:600;padding:10px 8px;cursor:pointer;font:inherit}
+  .btn-alt:hover{border-color:var(--accent)}
+  .hint{font-size:11.5px;color:var(--soft);margin-top:10px;line-height:1.45}
   .mono{font-family:monospace;font-size:12px}
   .delta-pos{color:var(--green);font-weight:700}
   .delta-neg{color:var(--red);font-weight:700}
@@ -61,8 +81,20 @@
 <body>
 <div class="wrap">
   <h1>Inventario de Piezas — Mosaico Pixel</h1>
-  <p class="sub">Stock fisico por color/pieza. Un color sin gestionar se considera sin limite hasta que le agregues piezas.</p>
+  <p class="sub">Stock físico por color/pieza. Los mosaicos y sus PDF se arman <b>sólo con las piezas que existen aquí</b>: un color sin piezas no se usa, sus pixeles pasan al color disponible más parecido.</p>
   <p class="nav"><a href="{{ url_for('stats_panel') }}">&larr; Panel de estadísticas</a></p>
+
+  {% if empty %}
+  <p class="banner">El inventario está vacío, así que por ahora los PDF se generan con los 40 colores de la paleta.
+    En cuanto agregues piezas de un color, el sistema empieza a usar únicamente lo que tengas en existencia.</p>
+  {% elif n_available == 0 %}
+  <p class="banner">Todos los colores están en 0. Agrega piezas de al menos un color para poder generar mosaicos.</p>
+  {% endif %}
+
+  <p class="summary">
+    <span>Colores disponibles <b>{{ n_available }}</b> / {{ colors|length }}</span>
+    <span>Piezas en existencia <b>{{ '{:,}'.format(total_pieces) }}</b></span>
+  </p>
 
   <div class="cols">
     <div>
@@ -74,18 +106,18 @@
               <tr>
                 <th>Color / pieza</th>
                 <th>Disponible</th>
-                <th>Agregar piezas</th>
+                <th>Ajustar piezas</th>
               </tr>
             </thead>
             <tbody>
               {% for c in colors %}
-              <tr>
+              <tr class="{{ '' if c.available else 'off' }}">
                 <td>
-                  <span class="swatch" style="background:rgb({{ c.rgb }})"></span>{{ c.name }}
+                  <img class="icon" src="{{ c.icon_url }}" alt="{{ c.name }}" width="48" height="48">{{ c.name }}
                 </td>
                 <td>
                   {% if not c.managed %}
-                    <span class="unmanaged">sin gestionar</span>
+                    <span class="unmanaged">sin piezas · no se usa</span>
                   {% elif c.quantity == 0 %}
                     <span class="qty zero">0</span>
                   {% elif c.quantity < 20 %}
@@ -99,6 +131,9 @@
                     <input type="hidden" name="color_index" value="{{ c.index }}">
                     <input type="number" name="quantity" min="1" value="50" required>
                     <button type="submit">+ Agregar</button>
+                    <button type="submit" class="minus"
+                            formaction="{{ url_for('inventory_remove') }}"
+                            onclick="return confirm('¿Quitar esa cantidad de piezas de {{ c.name }}?')">− Quitar</button>
                   </form>
                 </td>
               </tr>
@@ -111,26 +146,38 @@
 
     <div>
       <div class="section">
-        <h2>Agregar con nota</h2>
+        <h2>Movimiento con nota</h2>
         <div style="padding:16px">
           <form method="post" action="{{ url_for('inventory_add') }}">
+            <img class="icon-lg" id="selIcon" src="{{ colors[0].icon_url }}" alt="">
             <div class="field">
               <label>Color / pieza</label>
-              <select name="color_index" required>
-                {% for n in names %}
-                <option value="{{ loop.index0 }}">{{ n }}</option>
+              <select name="color_index" id="colorSelect" required>
+                {% for c in colors %}
+                <option value="{{ c.index }}" data-icon="{{ c.icon_url }}">{{ c.name }}</option>
                 {% endfor %}
               </select>
             </div>
             <div class="field">
-              <label>Cantidad a agregar</label>
-              <input type="number" name="quantity" min="1" value="100" required>
+              <label>Cantidad</label>
+              <input type="number" name="quantity" min="0" value="100" required>
             </div>
             <div class="field">
               <label>Nota (opcional)</label>
-              <input type="text" name="note" placeholder="Ej. compra proveedor X">
+              <input type="text" name="note" placeholder="Ej. corrección de captura">
             </div>
-            <button class="btn-primary" type="submit">Agregar al inventario</button>
+            <div class="btn-row">
+              <button class="btn-primary" type="submit">+ Agregar</button>
+              <button class="btn-alt" type="submit"
+                      formaction="{{ url_for('inventory_remove') }}"
+                      onclick="return confirm('¿Quitar esa cantidad de piezas del color seleccionado?')">− Quitar</button>
+              <button class="btn-alt" type="submit"
+                      formaction="{{ url_for('inventory_set') }}"
+                      onclick="return confirm('¿Dejar el color exactamente en esa cantidad de piezas?')">= Fijar</button>
+            </div>
+            <p class="hint"><b>Quitar</b> descuenta esa cantidad (nunca baja de 0).
+              <b>Fijar</b> deja el color exactamente en esa cantidad, sin importar lo que tuviera —
+              es lo más rápido para corregir una captura equivocada.</p>
           </form>
         </div>
       </div>
@@ -163,5 +210,12 @@
     </div>
   </div>
 </div>
+<script>
+  var colorSelect = document.getElementById('colorSelect');
+  var selIcon = document.getElementById('selIcon');
+  colorSelect.addEventListener('change', function () {
+    selIcon.src = colorSelect.options[colorSelect.selectedIndex].dataset.icon;
+  });
+</script>
 </body>
 </html>

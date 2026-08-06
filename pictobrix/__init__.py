@@ -32,19 +32,21 @@ def generate(
     name: str = "",
     pre_cropped: bool = False,
     confirm_sale: bool = False,
+    use_inventory: bool = True,
 ) -> Mosaic:
     """
     Convierte image_path en mosaico (cols x rows placas) y escribe out_pdf.
     Devuelve el objeto Mosaic (por si quieres datos o vista previa).
 
-    confirm_sale: si es True, el mosaico se arma respetando el inventario de
-                  piezas disponible (usando el color mas parecido que si haya
-                  stock cuando un color se agota) y, al terminar, descuenta
-                  del inventario las piezas usadas -- como si se concretara
-                  la venta de este mosaico.
+    use_inventory: por default el mosaico se arma solo con las piezas que
+                   existen en el inventario (un color agotado o que nunca se
+                   cargo no se usa; sus pixeles pasan al color disponible mas
+                   parecido). Con False se usa la paleta completa.
+    confirm_sale:  si es True, al terminar descuenta del inventario las piezas
+                   usadas -- como si se concretara la venta de este mosaico.
     """
     img = Image.open(image_path)
-    capacities = inventory.get_capacities() if confirm_sale else None
+    capacities = inventory.get_capacities() if use_inventory else None
     mosaic = build_mosaic(
         img, cols=cols, rows=rows, max_colors=max_colors,
         crop_mode=crop_mode, pre_cropped=pre_cropped, capacities=capacities,

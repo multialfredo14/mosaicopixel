@@ -104,43 +104,59 @@ def nearest_indices_with_capacity(
     pixels_rgb: np.ndarray, capacities: dict[int, int | None]
 ) -> np.ndarray:
     """
-    Como nearest_palette_indices, pero respeta un maximo de piezas
-    disponibles por color (capacities: indice de paleta -> cantidad, o
-    None si ese color no tiene limite).
+    Como nearest_palette_indices, pero solo con las piezas que existen en el
+    inventario (capacities: indice de paleta -> cantidad disponible; None =
+    sin limite, 0 = ese color no existe y no se puede usar).
 
-    Los pixeles que no caben en su color mas cercano por falta de stock se
-    reasignan al siguiente color mas parecido que todavia tenga piezas
-    disponibles ("worst fit first": se reubican primero los pixeles peor
-    emparejados con el color saturado, dejando los mejor emparejados donde
-    estan). Si el stock total no alcanza para todos los pixeles, se hace lo
-    mejor posible con lo disponible.
+    Un color en 0 queda fuera por completo: sus pixeles se pintan con el color
+    disponible mas parecido. Los colores que si existen tampoco se usan mas
+    alla de su stock: los pixeles que no caben se reasignan al siguiente color
+    disponible mas parecido ("worst fit first": se reubican primero los pixeles
+    peor emparejados con el color saturado, dejando los mejor emparejados donde
+    estan). Si el stock total no alcanza para todos los pixeles, el sobrante se
+    queda en su color disponible mas cercano (mejor esfuerzo); quien llama
+    puede detectar el faltante comparando los conteos contra el inventario.
     """
     lab = rgb_to_lab(pixels_rgb.reshape(-1, 3))
     d = np.linalg.norm(lab[:, None, :] - _PALETTE_LAB[None, :, :], axis=2)  # (n, k)
     n, k = d.shape
-    order = np.argsort(d, axis=1)  # preferencia por pixel, mejor primero
 
-    unlimited = np.array([capacities.get(i) is None for i in range(k)])
-    remaining = np.array(
-        [capacities.get(i) if capacities.get(i) is not None else n for i in range(k)],
-        dtype=np.int64,
-    )
+    caps = [capacities.get(i) for i in range(k)]
+    unlimited = np.array([c is None for c in caps])
+    available = np.array([c is None or c > 0 for c in caps])
+    if not available.any():
+        # Nada en existencia: no hay con que armar, se usa la paleta completa.
+        return np.argmin(d, axis=1)
+
+    # Preferencia por pixel (mejor primero) restringida a los colores que hay:
+    # los agotados se mandan al final con distancia infinita y nunca se eligen.
+    order = np.argsort(np.where(available[None, :], d, np.inf), axis=1)
+    n_available = int(available.sum())
+    remaining = np.array([n if c is None else c for c in caps], dtype=np.int64)
 
     rank = np.zeros(n, dtype=np.int64)
     assigned = order[:, 0].copy()
 
-    for _ in range(k):
+    for _ in range(2 * n_available + 2):
         counts = np.bincount(assigned, minlength=k)
         over = np.where((~unlimited) & (counts > remaining))[0]
         if len(over) == 0:
             break
+        moved = False
         for col in over:
-            idxs = np.where(assigned == col)[0]
-            excess = int(counts[col] - remaining[col])
-            d_col = d[idxs, col]
-            worst = idxs[np.argsort(-d_col)][:excess]
-            rank[worst] = np.minimum(rank[worst] + 1, k - 1)
+            idxs = np.where(assigned == col)[0]          # membresia al momento
+            excess = len(idxs) - int(remaining[col])
+            if excess <= 0:
+                continue
+            worst = idxs[np.argsort(-d[idxs, col])][:excess]
+            worst = worst[rank[worst] < n_available - 1]  # los que aun pueden moverse
+            if len(worst) == 0:
+                continue
+            rank[worst] += 1
             assigned[worst] = order[worst, rank[worst]]
+            moved = True
+        if not moved:
+            break  # ya no alcanza el stock: el resto se queda donde mejor cae
 
     return assigned
 
