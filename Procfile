@@ -1,1 +1,1 @@
-web: gunicorn webapp.app:app --bind 0.0.0.0:$PORT
+web: python manage.py migrate --noinput && gunicorn mosaicopixel.wsgi:application --bind 0.0.0.0:$PORT

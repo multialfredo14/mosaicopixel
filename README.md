@@ -45,10 +45,12 @@ Permite **encuadrar la foto** de forma interactiva con la proporción exacta de 
 placas, ver la vista previa del mosaico y descargar el PDF.
 
 ```bash
-python webapp/app.py
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
 ```
 
-Abre **http://127.0.0.1:5000** y:
+Abre **http://127.0.0.1:8000** y:
 
 1. Sube una foto (JPG/PNG).
 2. Elige el arreglo de placas (botones de placa u opciones de columnas/filas y
@@ -60,6 +62,26 @@ Abre **http://127.0.0.1:5000** y:
 > La librería de recorte (Cropper.js) ya viene incluida en `webapp/static/`, así
 > que la app funciona sin internet. Las tipografías se descargan de Google Fonts;
 > si no hay conexión, se usan las del sistema sin problema.
+
+### Login y administración
+
+La web ahora corre sobre **Django**:
+
+- Login manual: `/accounts/login/`
+- Registro manual: `/accounts/registro/`
+- Login con Google: botón "Entrar con Google" en la pantalla de login.
+- Administración de usuarios por defecto de Django: `/admin/`
+
+Para Google OAuth define estas variables de entorno:
+
+```bash
+GOOGLE_OAUTH2_KEY=tu-client-id
+GOOGLE_OAUTH2_SECRET=tu-client-secret
+```
+
+En Google Cloud Console agrega como redirect URI:
+`http://127.0.0.1:8000/oauth/complete/google-oauth2/` para local, y el mismo
+path con tu dominio en producción.
 
 ---
 
@@ -150,11 +172,15 @@ pictobrix_system/
 │   └── pdf_builder.py         # generación del PDF (portada + placas)
 ├── iconos/                    # NN-nombre.jpeg, un icono por color de paleta
 ├── webapp/
-│   ├── app.py                 # servidor Flask
+│   ├── app.py                 # servidor Flask anterior (referencia)
 │   ├── templates/index.html   # interfaz (subir, encuadrar, previsualizar)
 │   ├── templates/inventory.html  # panel de inventario
 │   └── static/                # Cropper.js incluido
 ├── cli.py                     # interfaz de línea de comandos
+├── manage.py                  # servidor Django
+├── mosaicopixel/              # configuración Django + URLs
+├── accounts/                  # registro manual
+├── generator/                 # vistas Django del generador y paneles
 ├── requirements.txt
 └── README.md
 ```

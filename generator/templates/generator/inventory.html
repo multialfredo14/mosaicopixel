@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inventario de piezas</title>
+<meta name="robots" content="noindex, nofollow">
+<style>
+  :root{--bg:#0f1117;--panel:#1a1d27;--border:#2a2d3a;--ink:#e4e6ed;
+    --soft:#8b8fa3;--accent:#6c8aff;--green:#34d399;--orange:#fb923c;--red:#f87171}
+  *{box-sizing:border-box;margin:0}
+  body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+  .wrap{max-width:1200px;margin:0 auto;padding:24px 20px 60px}
+  h1{font-size:20px;font-weight:700;margin-bottom:4px}.sub{color:var(--soft);font-size:13px;margin-bottom:8px}
+  .nav{margin-bottom:24px}.nav a{color:var(--accent);font-size:13px;text-decoration:none}.nav a:hover{text-decoration:underline}
+  .cols{display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start}@media(max-width:900px){.cols{grid-template-columns:1fr}}
+  .section{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px}
+  .section h2{font-size:13px;font-weight:600;padding:14px 16px;border-bottom:1px solid var(--border);color:var(--soft);text-transform:uppercase;letter-spacing:.06em}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}th{text-align:left;padding:10px 12px;color:var(--soft);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--panel)}
+  td{padding:8px 12px;border-bottom:1px solid var(--border);white-space:nowrap}tr:hover td{background:rgba(108,138,255,.06)}
+  .table-scroll{max-height:640px;overflow-y:auto}.icon{display:inline-block;width:48px;height:48px;border-radius:8px;vertical-align:middle;margin-right:10px;border:1px solid rgba(255,255,255,.15)}
+  .icon-lg{width:112px;height:112px;border-radius:12px;border:1px solid rgba(255,255,255,.15);display:block;margin:0 auto 10px}
+  tr.off td:first-child{color:var(--soft)}.summary{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:var(--soft);margin-bottom:14px}
+  .summary b{color:var(--ink);font-family:monospace;font-size:13px}.banner{background:rgba(251,146,60,.12);border:1px solid rgba(251,146,60,.4);border-radius:10px;padding:10px 14px;font-size:12.5px;color:var(--orange);margin-bottom:18px}
+  .qty{font-weight:700;font-family:monospace}.qty.zero{color:var(--red)}.qty.low{color:var(--orange)}.qty.ok{color:var(--green)}.unmanaged{color:var(--soft);font-style:italic}
+  form.addrow{display:flex;gap:6px;align-items:center}form.addrow input[type=number]{width:70px;background:#11131b;border:1px solid var(--border);border-radius:6px;color:var(--ink);padding:4px 6px;font:inherit}
+  form.addrow button{background:var(--accent);border:none;border-radius:6px;color:#0b0c10;font-weight:700;padding:5px 10px;cursor:pointer;font-size:12px}
+  form.addrow button.minus{background:transparent;border:1px solid var(--border);color:var(--ink)}form.addrow button.minus:hover{border-color:var(--red);color:var(--red)}
+  .field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}.field label{font-size:11px;color:var(--soft);text-transform:uppercase;letter-spacing:.05em}
+  select,input[type=text],input[type=number]{background:#11131b;border:1px solid var(--border);border-radius:8px;color:var(--ink);padding:8px 10px;font:inherit;width:100%}
+  .btn-primary{background:var(--accent);border:none;border-radius:8px;color:#0b0c10;font-weight:700;padding:10px 14px;cursor:pointer;font:inherit;width:100%}.btn-row{display:flex;gap:8px}.btn-row .btn-primary{flex:1.4}
+  .btn-alt{flex:1;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--ink);font-weight:600;padding:10px 8px;cursor:pointer;font:inherit}.btn-alt:hover{border-color:var(--accent)}
+  .hint{font-size:11.5px;color:var(--soft);margin-top:10px;line-height:1.45}.mono{font-family:monospace;font-size:12px}.delta-pos{color:var(--green);font-weight:700}.delta-neg{color:var(--red);font-weight:700}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Inventario de Piezas — Mosaico Pixel</h1>
+  <p class="sub">Stock físico por color/pieza. Los mosaicos y sus PDF se arman <b>sólo con las piezas que existen aquí</b>.</p>
+  <p class="nav"><a href="{% url 'stats_panel' %}">&larr; Panel de estadísticas</a> · <a href="{% url 'admin:index' %}">Admin Django</a></p>
+
+  {% if empty %}
+  <p class="banner">El inventario está vacío, así que por ahora los PDF se generan con los 40 colores de la paleta.</p>
+  {% elif n_available == 0 %}
+  <p class="banner">Todos los colores están en 0. Agrega piezas de al menos un color para poder generar mosaicos.</p>
+  {% endif %}
+
+  <p class="summary">
+    <span>Colores disponibles <b>{{ n_available }}</b> / {{ colors|length }}</span>
+    <span>Piezas en existencia <b>{{ total_pieces }}</b></span>
+  </p>
+
+  <div class="cols">
+    <div class="section">
+      <h2>Stock por color ({{ colors|length }})</h2>
+      <div class="table-scroll"><table><thead><tr><th>Color / pieza</th><th>Disponible</th><th>Ajustar piezas</th></tr></thead><tbody>
+      {% for c in colors %}
+        <tr class="{% if not c.available %}off{% endif %}">
+          <td><img class="icon" src="{{ c.icon_url }}" alt="{{ c.name }}" width="48" height="48">{{ c.name }}</td>
+          <td>
+            {% if not c.managed %}<span class="unmanaged">sin piezas · no se usa</span>
+            {% elif c.quantity == 0 %}<span class="qty zero">0</span>
+            {% elif c.quantity < 20 %}<span class="qty low">{{ c.quantity }}</span>
+            {% else %}<span class="qty ok">{{ c.quantity }}</span>{% endif %}
+          </td>
+          <td>
+            <form class="addrow" method="post" action="{% url 'inventory_add' %}">
+              {% csrf_token %}
+              <input type="hidden" name="color_index" value="{{ c.index }}">
+              <input type="number" name="quantity" min="1" value="50" required>
+              <button type="submit">+ Agregar</button>
+              <button type="submit" class="minus" formaction="{% url 'inventory_remove' %}" onclick="return confirm('¿Quitar esa cantidad de piezas de {{ c.name }}?')">- Quitar</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody></table></div>
+    </div>
+
+    <div>
+      <div class="section">
+        <h2>Movimiento con nota</h2>
+        <div style="padding:16px">
+          <form method="post" action="{% url 'inventory_add' %}">
+            {% csrf_token %}
+            <img class="icon-lg" id="selIcon" src="{{ colors.0.icon_url }}" alt="">
+            <div class="field"><label>Color / pieza</label><select name="color_index" id="colorSelect" required>
+              {% for c in colors %}<option value="{{ c.index }}" data-icon="{{ c.icon_url }}">{{ c.name }}</option>{% endfor %}
+            </select></div>
+            <div class="field"><label>Cantidad</label><input type="number" name="quantity" min="0" value="100" required></div>
+            <div class="field"><label>Nota (opcional)</label><input type="text" name="note" placeholder="Ej. corrección de captura"></div>
+            <div class="btn-row">
+              <button class="btn-primary" type="submit">+ Agregar</button>
+              <button class="btn-alt" type="submit" formaction="{% url 'inventory_remove' %}" onclick="return confirm('¿Quitar esa cantidad de piezas del color seleccionado?')">- Quitar</button>
+              <button class="btn-alt" type="submit" formaction="{% url 'inventory_set' %}" onclick="return confirm('¿Dejar el color exactamente en esa cantidad de piezas?')">= Fijar</button>
+            </div>
+            <p class="hint"><b>Quitar</b> descuenta esa cantidad. <b>Fijar</b> deja el color exactamente en esa cantidad.</p>
+          </form>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Movimientos recientes</h2>
+        <div class="table-scroll" style="max-height:400px"><table><thead><tr><th>Fecha</th><th>Color</th><th>Cambio</th><th>Motivo</th></tr></thead><tbody>
+          {% for m in movements %}
+          <tr><td class="mono">{{ m.ts }}</td><td>{{ m.color_name }}</td><td class="{% if m.delta > 0 %}delta-pos{% else %}delta-neg{% endif %}">{{ m.delta }}</td><td>{{ m.reason }}{% if m.note %} · {{ m.note }}{% endif %}</td></tr>
+          {% empty %}
+          <tr><td colspan="4" style="color:var(--soft)">Sin movimientos aún</td></tr>
+          {% endfor %}
+        </tbody></table></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  var colorSelect = document.getElementById('colorSelect');
+  var selIcon = document.getElementById('selIcon');
+  colorSelect.addEventListener('change', function () {
+    selIcon.src = colorSelect.options[colorSelect.selectedIndex].dataset.icon;
+  });
+</script>
+</body>
+</html>

@@ -3,3 +3,5 @@ numpy>=1.24
 reportlab>=4.0
 Flask>=3.0
 gunicorn>=22.0
+Django>=5.0
+social-auth-app-django>=5.4
