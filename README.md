@@ -65,23 +65,40 @@ Abre **http://127.0.0.1:8000** y:
 
 ### Login y administración
 
-La web ahora corre sobre **Django**:
+La web corre sobre **Django** y todo el generador exige sesión iniciada; los
+paneles internos (`/mx-panel-2026*`) además exigen usuario **staff**.
 
-- Login manual: `/accounts/login/`
-- Registro manual: `/accounts/registro/`
-- Login con Google: botón "Entrar con Google" en la pantalla de login.
-- Administración de usuarios por defecto de Django: `/admin/`
+- Login: `/accounts/login/`
+- Crear cuenta (con Gmail o usuario/contraseña): `/accounts/registro/`
+- Administración por defecto de Django: `/admin/` (usuarios, permisos, staff)
 
-Para Google OAuth define estas variables de entorno:
+Primer usuario administrador:
+
+```bash
+python manage.py createsuperuser          # local
+railway run python manage.py createsuperuser   # en producción
+```
+
+Para el acceso con Google define estas variables de entorno:
 
 ```bash
 GOOGLE_OAUTH2_KEY=tu-client-id
 GOOGLE_OAUTH2_SECRET=tu-client-secret
 ```
 
-En Google Cloud Console agrega como redirect URI:
-`http://127.0.0.1:8000/oauth/complete/google-oauth2/` para local, y el mismo
-path con tu dominio en producción.
+Mientras no existan, las pantallas ocultan el botón de Google y explican que
+falta configurarlo (en vez de mandar a un error). En Google Cloud Console, los
+**URI de redirección autorizados** deben ser exactamente:
+
+```
+http://127.0.0.1:8000/oauth/complete/google-oauth2/          (local)
+https://TU-DOMINIO/oauth/complete/google-oauth2/             (producción)
+```
+
+Variables opcionales: `DJANGO_SECRET_KEY` (obligatoria en producción),
+`DJANGO_DEBUG=1` para desarrollo, `DJANGO_ALLOWED_HOSTS` y
+`DJANGO_CSRF_TRUSTED_ORIGINS` si el dominio no es el de Railway (el de Railway
+se autoriza solo con `RAILWAY_PUBLIC_DOMAIN`).
 
 ---
 

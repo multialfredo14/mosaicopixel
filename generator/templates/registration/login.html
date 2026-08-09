@@ -16,6 +16,9 @@
   .btn:hover{background:var(--accent-d)}.google{display:block;text-align:center;text-decoration:none;margin-top:12px;background:#fff;color:var(--ink);border:1px solid var(--line)}
   .links{display:flex;justify-content:space-between;gap:12px;margin-top:16px;font-size:13px}.links a{color:var(--accent);text-decoration:none}.links a:hover{text-decoration:underline}
   .err{background:#fff1f1;border:1px solid #ffcaca;color:#9f1d1d;border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:14px}
+  .hint{margin:12px 0 0;font-size:12.5px;color:var(--soft);line-height:1.45}
+  .hint code{font-size:12px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:1px 4px}
+  form + form{margin-top:12px}
 </style>
 </head>
 <body>
@@ -32,9 +35,19 @@
       <button class="btn" type="submit">Entrar</button>
       <input type="hidden" name="next" value="{{ next }}">
     </form>
-    <a class="btn google" href="{% url 'social:begin' 'google-oauth2' %}">Entrar con Google</a>
+    {% if google_enabled %}
+    {# social-auth exige POST en /oauth/login/... (protege contra login CSRF) #}
+    <form method="post" action="{% url 'social:begin' 'google-oauth2' %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="btn google" type="submit">Entrar con Google</button>
+    </form>
+    {% else %}
+    <p class="hint">El acceso con Google no está configurado en este servidor
+      (faltan <code>GOOGLE_OAUTH2_KEY</code> y <code>GOOGLE_OAUTH2_SECRET</code>).</p>
+    {% endif %}
     <div class="links">
-      <a href="{% url 'signup' %}">Crear cuenta manual</a>
+      <a href="{% url 'signup' %}">Crear cuenta</a>
       <a href="{% url 'admin:index' %}">Admin Django</a>
     </div>
   </main>
