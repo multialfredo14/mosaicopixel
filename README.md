@@ -75,9 +75,16 @@ paneles internos (`/mx-panel-2026*`) además exigen usuario **staff**.
 Primer usuario administrador:
 
 ```bash
-python manage.py createsuperuser          # local
-railway run python manage.py createsuperuser   # en producción
+python manage.py createsuperuser                          # local
+railway ssh --service web 'python manage.py createsuperuser'   # en producción
 ```
+
+> En producción tiene que ser `railway ssh` (se ejecuta **dentro** del
+> contenedor, donde está montado el volumen con la base). `railway run` corre
+> en tu máquina con las variables de Railway, así que crearía el usuario en una
+> base local. Por la misma razón las migraciones van en el `startCommand` de
+> `railway.json` y no en `preDeployCommand`: el pre-deploy corre sin el volumen
+> montado y sus cambios se pierden.
 
 Para el acceso con Google define estas variables de entorno:
 
