@@ -100,6 +100,26 @@ Variables opcionales: `DJANGO_SECRET_KEY` (obligatoria en producción),
 `DJANGO_CSRF_TRUSTED_ORIGINS` si el dominio no es el de Railway (el de Railway
 se autoriza solo con `RAILWAY_PUBLIC_DOMAIN`).
 
+#### Dónde van las claves
+
+- **En local**: copia la plantilla y llena los valores. El archivo `.env` está
+  en `.gitignore`, así que nunca se sube al repositorio.
+
+  ```bash
+  cp .env.example .env
+  python manage.py runserver
+  ```
+
+- **En producción (Railway)**: en el panel del servicio, pestaña *Variables*, o
+  desde la terminal sin que el valor quede en el historial:
+
+  ```bash
+  railway variable set GOOGLE_OAUTH2_SECRET --stdin
+  ```
+
+Las variables reales del entorno **mandan sobre el `.env`**, así que un archivo
+olvidado en la máquina no puede pisar la configuración de producción.
+
 ---
 
 ## Uso 2 — Línea de comandos

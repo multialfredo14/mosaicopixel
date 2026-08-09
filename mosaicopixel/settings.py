@@ -3,6 +3,17 @@ import os
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Archivo .env para desarrollo local (esta en .gitignore, nunca se sube).
+# Las variables reales del entorno mandan sobre el archivo, asi que en Railway
+# siguen ganando las que configuraste en el panel del servicio.
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(BASE_DIR / ".env", override=False)
+except ImportError:  # sin python-dotenv se usan solo las variables del entorno
+    pass
+
 DATA_DIR = os.environ.get("DATA_DIR")
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-change-me")
