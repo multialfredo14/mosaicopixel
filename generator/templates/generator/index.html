@@ -154,17 +154,21 @@
     <div>
       <h1>De la foto a la placa</h1>
       <p class="tag">Sube una foto, encuádrala con la proporción de tus placas y descarga el instructivo en PDF.</p>
+      {# El generador es publico; esta barra es solo para el equipo. #}
+      {% if request.user.is_authenticated %}
       <div class="session">
         <span>{{ request.user.username }}</span>
         {% if request.user.is_staff %}
           <a href="{% url 'admin:index' %}">Admin</a>
           <a href="{% url 'stats_panel' %}">Estadísticas</a>
+          <a href="{% url 'inventory_panel' %}">Inventario</a>
         {% endif %}
         <form method="post" action="{% url 'logout' %}" style="margin:0">
           {% csrf_token %}
           <button type="submit">Salir</button>
         </form>
       </div>
+      {% endif %}
     </div>
   </header>
 

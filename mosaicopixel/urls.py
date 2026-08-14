@@ -3,7 +3,6 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
-from accounts.views import signup
 from generator import views as generator_views
 
 
@@ -26,7 +25,6 @@ urlpatterns = [
         name="login",
     ),
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
-    path("accounts/registro/", signup, name="signup"),
     path("oauth/", include("social_django.urls", namespace="social")),
     path("admin/", admin.site.urls),
 ]

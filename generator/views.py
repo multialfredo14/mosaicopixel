@@ -9,10 +9,10 @@ import time
 from datetime import datetime, timezone
 
 from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from PIL import Image
 
@@ -101,7 +101,11 @@ def _params(request):
     return img, cols, rows, max_colors, name
 
 
-@login_required
+# El generador es publico: cualquiera puede usarlo sin cuenta. ensure_csrf_cookie
+# garantiza la cookie csrftoken que el JS de la pagina manda en /preview y
+# /generate (antes venia "de rebote" del formulario de salir, que ya no se
+# dibuja para visitantes anonimos).
+@ensure_csrf_cookie
 def index(request):
     return render(
         request,
@@ -110,7 +114,6 @@ def index(request):
     )
 
 
-@login_required
 @require_POST
 def preview(request):
     img, cols, rows, max_colors, name = _params(request)
@@ -142,7 +145,6 @@ def preview(request):
     )
 
 
-@login_required
 @require_POST
 def generate_pdf(request):
     img, cols, rows, max_colors, name = _params(request)

@@ -24,7 +24,8 @@
 <body>
   <main class="card">
     <h1>Ingresar</h1>
-    <p class="sub">Accede para generar instructivos y administrar mosaicos.</p>
+    <p class="sub">Sólo para el equipo: administrar inventario, estadísticas y usuarios.
+      Para generar instructivos no hace falta cuenta.</p>
     {% if form.errors %}<div class="err">Usuario o contraseña inválidos.</div>{% endif %}
     <form method="post">
       {% csrf_token %}
@@ -47,7 +48,7 @@
       (faltan <code>GOOGLE_OAUTH2_KEY</code> y <code>GOOGLE_OAUTH2_SECRET</code>).</p>
     {% endif %}
     <div class="links">
-      <a href="{% url 'signup' %}">Crear cuenta</a>
+      <a href="{% url 'index' %}">Ir al generador</a>
       <a href="{% url 'admin:index' %}">Admin Django</a>
     </div>
   </main>

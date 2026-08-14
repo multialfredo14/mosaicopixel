@@ -47,7 +47,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "social_django",
-    "accounts",
     "generator",
 ]
 

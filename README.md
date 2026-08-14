@@ -65,12 +65,22 @@ Abre **http://127.0.0.1:8000** y:
 
 ### Login y administración
 
-La web corre sobre **Django** y todo el generador exige sesión iniciada; los
-paneles internos (`/mx-panel-2026*`) además exigen usuario **staff**.
+**El generador es público: no hace falta cuenta para usarlo.** Cualquiera puede
+subir una foto, ver la vista previa y descargar el PDF. La sesión sólo sirve
+para lo interno.
 
-- Login: `/accounts/login/`
-- Crear cuenta (con Gmail o usuario/contraseña): `/accounts/registro/`
+- Generador (abierto): `/`
+- Login del equipo: `/accounts/login/` — con Google o usuario/contraseña
+- Paneles internos (`/mx-panel-2026*`): exigen usuario **staff**
 - Administración por defecto de Django: `/admin/` (usuarios, permisos, staff)
+
+No hay registro público: las cuentas se crean desde `/admin/` o con
+`createsuperuser`. Un visitante no necesita ninguna.
+
+> Ojo con una consecuencia: **cada PDF generado descuenta piezas del
+> inventario**, y ahora lo puede disparar cualquiera desde internet. Si eso no
+> es lo que quieres, el descuento se controla en `generate_pdf`
+> (`generator/views.py`).
 
 Primer usuario administrador:
 
@@ -223,7 +233,6 @@ pictobrix_system/
 ├── cli.py                     # interfaz de línea de comandos
 ├── manage.py                  # servidor Django
 ├── mosaicopixel/              # configuración Django + URLs
-├── accounts/                  # registro manual
 ├── generator/                 # vistas Django del generador y paneles
 ├── requirements.txt
 └── README.md
