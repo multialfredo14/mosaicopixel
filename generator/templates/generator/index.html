@@ -121,6 +121,13 @@
   .preview-wrap{display:flex;flex-direction:column;align-items:center;gap:12px;width:100%}
   .preview-wrap img{max-width:100%;max-height:560px;border-radius:8px;
     box-shadow:var(--shadow);image-rendering:pixelated}
+  /* Vista en sala: el mosaico se dibuja a escala real sobre la foto de un muro */
+  .room-wrap{display:flex;flex-direction:column;align-items:center;gap:12px;width:100%}
+  .room{position:relative;width:100%;max-width:720px;line-height:0}
+  .room .bg{width:100%;display:block;border-radius:8px}
+  .room .art{position:absolute;left:50%;transform:translateX(-50%);
+    image-rendering:pixelated;
+    box-shadow:0 10px 22px rgba(22,32,46,.30),0 2px 6px rgba(22,32,46,.20)}
   .tabs{display:flex;gap:6px;padding:12px 14px 0}
   .tab{font:inherit;font-size:12.5px;border:1px solid var(--line);border-bottom:none;
     background:#f3f5f9;border-radius:9px 9px 0 0;padding:8px 14px;cursor:pointer;color:var(--ink-soft)}
@@ -244,6 +251,7 @@
       <div class="tabs">
         <button class="tab sel" id="tabCrop">Encuadre</button>
         <button class="tab" id="tabPrev">Mosaico</button>
+        <button class="tab" id="tabRoom">En la sala</button>
       </div>
       <div class="stage" id="stage">
         <p class="hint">Sube una foto para empezar. El recorte se ajusta solo a la proporción de las placas que elijas.</p>
@@ -261,6 +269,20 @@
 <script>
 const PLATE_CM = {{ plate_cm }};
 let cropper = null, hasImage = false, lastPreview = null;
+// Pestana a la que hay que llegar cuando la vista previa termine de armarse.
+let wantTab = 'prev';
+
+// Vista en sala. Los numeros salen de medir la foto de referencia: un mosaico
+// de 51.2 x 76.8 cm ocupa ahi el 19.2% del ancho y su borde inferior queda al
+// 56.2% de la altura contando desde abajo. De ahi se despeja cuanto muro
+// abarca la foto, y con eso cualquier medida en cm se dibuja a escala real.
+const ROOM = {
+  bg: "{% static 'sala.jpg' %}",
+  sceneW: 267,    // cm de pared que abarca la foto a lo ancho
+  sceneH: 200.3,  // idem a lo alto (la foto es 4:3)
+  bottom: 56.2,   // borde inferior del cuadro, % desde abajo
+  topGap: 3       // margen minimo que se deja arriba
+};
 
 const $ = id => document.getElementById(id);
 const colsI = $('cols'), rowsI = $('rows');
@@ -305,6 +327,9 @@ function stats(){
 function sync(){
   colsI.value=Math.max(1,Math.min(10,+colsI.value||1));
   rowsI.value=Math.max(1,Math.min(10,+rowsI.value||1));
+  // Cambiar la forma cambia las medidas reales, asi que el mosaico que ya
+  // estuviera armado deja de servir para la vista en sala.
+  lastPreview=null;
   markPreset(); stats();
   if(cropper) cropper.setAspectRatio(aspect());
 }
@@ -324,6 +349,7 @@ function loadFile(f){
   const rd=new FileReader();
   rd.onload=()=>{
     showCrop(rd.result);
+    lastPreview=null;
     hasImage=true; $('btnPrev').disabled=false; $('btnPdf').disabled=false;
   };
   rd.readAsDataURL(f);
@@ -342,9 +368,11 @@ function showCrop(dataUrl){
 function selTab(which){
   $('tabCrop').classList.toggle('sel',which==='crop');
   $('tabPrev').classList.toggle('sel',which==='prev');
+  $('tabRoom').classList.toggle('sel',which==='room');
 }
 $('tabCrop').onclick=()=>{ if(hasImage){selTab('crop');} };
-$('tabPrev').onclick=()=>{ if(lastPreview){renderPreview(lastPreview);} else if(hasImage){$('btnPrev').click();} };
+$('tabPrev').onclick=()=>{ if(lastPreview){renderPreview(lastPreview);} else if(hasImage){wantTab='prev';$('btnPrev').click();} };
+$('tabRoom').onclick=()=>{ if(lastPreview){renderRoom(lastPreview);} else if(hasImage){wantTab='room';$('btnPrev').click();} };
 
 function croppedDataUrl(){
   const c=+colsI.value, r=+rowsI.value;
@@ -360,8 +388,8 @@ function payload(){
   });
 }
 
-function busy(msg){
-  selTab('prev');
+function busy(msg,tab){
+  selTab(tab||'prev');
   $('stage').innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;gap:12px">
     <div class="spin"></div><p class="note">${msg}</p></div>`;
 }
@@ -369,11 +397,13 @@ function busy(msg){
 // ---- Vista previa ----
 $('btnPrev').onclick=async()=>{
   if(!hasImage)return;
-  busy('Construyendo el mosaico…');
+  const target=wantTab; wantTab='prev';
+  busy('Construyendo el mosaico…',target);
   try{
     const res=await fetch('/preview',{method:'POST',headers:{'Content-Type':'application/json','X-CSRFToken':csrfToken},body:payload()});
     const d=await res.json();
-    lastPreview=d; renderPreview(d);
+    lastPreview=d;
+    if(target==='room'){ renderRoom(d); } else { renderPreview(d); }
   }catch(e){ $('stage').innerHTML='<p class="hint">No se pudo generar la vista previa. Revisa la consola del servidor.</p>'; }
 };
 
@@ -390,6 +420,29 @@ function renderPreview(d){
     <img src="${d.preview}">
     <p class="note">${d.boards} placas · ${d.pieces.toLocaleString('es-MX')} piezas · ${d.colors} colores · ${d.width_cm} × ${d.height_cm} cm</p>
     ${stock}
+  </div>`;
+}
+
+// ---- Vista en la sala ----
+function renderRoom(d){
+  selTab('room');
+  // El ancho manda: la imagen del mosaico ya viene con la proporcion correcta,
+  // asi que fijando el ancho en % la altura sale sola.
+  let w=d.width_cm/ROOM.sceneW*100, h=d.height_cm/ROOM.sceneH*100;
+  const maxH=100-ROOM.topGap-ROOM.bottom;
+  let shrunk=0;
+  if(h>maxH){ const f=maxH/h; w*=f; h*=f; shrunk=Math.round(f*100); }
+  const medidas=`${d.width_cm} × ${d.height_cm} cm · ${d.boards} ${d.boards===1?'placa':'placas'}`;
+  const nota=shrunk
+    ? `<p class="note warn">${medidas} · no cabe en el muro de la foto, se muestra al ${shrunk}% para que entre completo.</p>`
+    : `<p class="note">${medidas} · a escala real sobre un muro de referencia.</p>`;
+  $('stage').innerHTML=`<div class="room-wrap">
+    <div class="room">
+      <img class="bg" src="${ROOM.bg}" alt="Sala de referencia">
+      <img class="art" src="${d.preview}" alt="El mosaico colgado en la pared"
+           style="width:${w.toFixed(2)}%;bottom:${ROOM.bottom}%">
+    </div>
+    ${nota}
   </div>`;
 }
 
