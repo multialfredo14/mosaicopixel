@@ -272,6 +272,20 @@ let cropper = null, hasImage = false, lastPreview = null;
 // Pestana a la que hay que llegar cuando la vista previa termine de armarse.
 let wantTab = 'prev';
 
+// Topes de tamano para no reventar la memoria de canvas del telefono. En iOS
+// hay un cupo para todos los lienzos de la pagina y, cuando se pasa, no salta
+// ningun error: toDataURL devuelve "data:," y el servidor recibe una imagen
+// vacia. Las fotos de celular vienen de 12 MP para arriba y el recortador las
+// carga enteras, asi que se reducen antes de tocar nada. No se pierde detalle:
+// el mosaico final tiene 32 px por placa, 320 como mucho.
+const MAX_SRC_PX = 2000;   // lado mayor de la foto que recibe el recortador
+const MAX_CROP_PX = 1600;  // lado mayor del recorte que se manda al servidor
+
+// El recorte se calcula una sola vez y lo reusan /preview y /generate. Antes
+// cada uno armaba su propio lienzo, y el segundo era justo el que se pasaba
+// del cupo: por eso la vista previa salia y el PDF no.
+let cropCache = null;
+
 // Vista en sala. Los numeros salen de medir la foto de referencia: un mosaico
 // de 51.2 x 76.8 cm ocupa ahi el 19.2% del ancho y su borde inferior queda al
 // 56.2% de la altura contando desde abajo. De ahi se despeja cuanto muro
@@ -327,9 +341,9 @@ function stats(){
 function sync(){
   colsI.value=Math.max(1,Math.min(10,+colsI.value||1));
   rowsI.value=Math.max(1,Math.min(10,+rowsI.value||1));
-  // Cambiar la forma cambia las medidas reales, asi que el mosaico que ya
-  // estuviera armado deja de servir para la vista en sala.
-  lastPreview=null;
+  // Cambiar la forma cambia las medidas reales y la proporcion del recorte,
+  // asi que lo que ya estuviera armado deja de servir.
+  lastPreview=null; cropCache=null;
   markPreset(); stats();
   if(cropper) cropper.setAspectRatio(aspect());
 }
@@ -348,11 +362,34 @@ fileI.onchange=e=>{if(e.target.files[0])loadFile(e.target.files[0]);};
 function loadFile(f){
   const rd=new FileReader();
   rd.onload=()=>{
-    showCrop(rd.result);
-    lastPreview=null;
-    hasImage=true; $('btnPrev').disabled=false; $('btnPdf').disabled=false;
+    shrink(rd.result,MAX_SRC_PX,small=>{
+      showCrop(small);
+      lastPreview=null; cropCache=null;
+      hasImage=true; $('btnPrev').disabled=false; $('btnPdf').disabled=false;
+    });
   };
   rd.readAsDataURL(f);
+}
+
+// Reduce la foto si viene mas grande que 'max' de lado. Si algo falla se sigue
+// con la original: mas vale intentarlo que quedarse sin poder subir nada.
+function shrink(dataUrl,max,done){
+  const img=new Image();
+  img.onload=()=>{
+    const f=max/Math.max(img.width,img.height);
+    if(f>=1){ done(dataUrl); return; }
+    try{
+      const cv=document.createElement('canvas');
+      cv.width=Math.round(img.width*f); cv.height=Math.round(img.height*f);
+      const ctx=cv.getContext('2d');
+      ctx.fillStyle='#fff'; ctx.fillRect(0,0,cv.width,cv.height);
+      ctx.drawImage(img,0,0,cv.width,cv.height);
+      const out=cv.toDataURL('image/jpeg',0.92);
+      done(out && out.length>1000 ? out : dataUrl);
+    }catch(e){ done(dataUrl); }
+  };
+  img.onerror=()=>done(dataUrl);
+  img.src=dataUrl;
 }
 
 function showCrop(dataUrl){
@@ -363,6 +400,8 @@ function showCrop(dataUrl){
   div.appendChild(img); stage.appendChild(div);
   if(cropper) cropper.destroy();
   cropper=new Cropper(img,{aspectRatio:aspect(),viewMode:1,autoCropArea:1,background:false});
+  // Mover o acercar el recorte invalida el que estuviera guardado.
+  img.addEventListener('crop',()=>{cropCache=null;});
 }
 
 function selTab(which){
@@ -375,10 +414,20 @@ $('tabPrev').onclick=()=>{ if(lastPreview){renderPreview(lastPreview);} else if(
 $('tabRoom').onclick=()=>{ if(lastPreview){renderRoom(lastPreview);} else if(hasImage){wantTab='room';$('btnPrev').click();} };
 
 function croppedDataUrl(){
+  if(cropCache) return cropCache;
   const c=+colsI.value, r=+rowsI.value;
-  const canvas=cropper.getCroppedCanvas({width:c*32*8, height:r*32*8,
-    imageSmoothingQuality:'high'});
-  return canvas.toDataURL('image/png');
+  // 8 px por pieza para que promedie bien al reducir, sin pasar del tope.
+  let w=c*32*8, h=r*32*8;
+  const f=MAX_CROP_PX/Math.max(w,h);
+  if(f<1){ w=Math.round(w*f); h=Math.round(h*f); }
+  const canvas=cropper.getCroppedCanvas({width:w,height:h,
+    imageSmoothingQuality:'high',fillColor:'#fff'});
+  // JPEG y no PNG: la foto se reduce a 40 colores de todas formas, y en base64
+  // pesa casi diez veces menos, que en datos moviles se nota.
+  const url=canvas&&canvas.toDataURL('image/jpeg',0.92);
+  if(!url||url.length<1000) throw new Error('canvas-vacio');
+  cropCache=url;
+  return url;
 }
 
 function payload(){
@@ -404,8 +453,16 @@ $('btnPrev').onclick=async()=>{
     const d=await res.json();
     lastPreview=d;
     if(target==='room'){ renderRoom(d); } else { renderPreview(d); }
-  }catch(e){ $('stage').innerHTML='<p class="hint">No se pudo generar la vista previa. Revisa la consola del servidor.</p>'; }
+  }catch(e){ $('stage').innerHTML=`<p class="hint">${errMsg(e,'armar la vista previa')}</p>`; }
 };
+
+// El navegador se queda sin memoria de lienzo antes que el servidor falle, y
+// eso hay que decirlo con algo accionable en vez de mandar a ver los logs.
+function errMsg(e,que){
+  return e && e.message==='canvas-vacio'
+    ? `Al navegador se le acabo la memoria al preparar la imagen. Recarga la pagina y prueba con una foto mas chica.`
+    : `No se pudo ${que}. Vuelve a intentarlo; si sigue igual, avisa.`;
+}
 
 function renderPreview(d){
   selTab('prev');
@@ -458,12 +515,15 @@ $('btnPdf').onclick=async()=>{
     const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
     a.href=url; a.download=(($('name').value.trim()||'mosaico_pixel')+'_instructivo.pdf').replace(/\s+/g,'_');
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    document.body.appendChild(a); a.click(); a.remove();
+    // Sin el retraso, en el movil se revoca la URL antes de que el navegador
+    // alcance a empezar la descarga y el archivo se queda a medias.
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
     if(missing>0){
       alert(`El instructivo se generó con las piezas disponibles, pero faltan `+
             `${missing.toLocaleString('es-MX')} piezas en el inventario para armarlo completo.`);
     }
-  }catch(e){ alert('No se pudo generar el PDF. Revisa la consola del servidor.'); }
+  }catch(e){ alert(errMsg(e,'generar el PDF')); }
   $('btnPdf').textContent=old; $('btnPdf').disabled=false;
 };
 

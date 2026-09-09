@@ -83,11 +83,21 @@ def _log_event(request, action, cols, rows, mosaic, name, elapsed):
     conn.close()
 
 
+class BadImage(Exception):
+    """El navegador mando algo que no es una imagen."""
+
+
 def _decode_dataurl(data_url: str) -> Image.Image:
     if "," in data_url:
         data_url = data_url.split(",", 1)[1]
-    raw = base64.b64decode(data_url)
-    return Image.open(io.BytesIO(raw)).convert("RGB")
+    try:
+        raw = base64.b64decode(data_url)
+        return Image.open(io.BytesIO(raw)).convert("RGB")
+    except Exception as exc:
+        # Pasa cuando al navegador se le acaba la memoria de canvas y
+        # toDataURL devuelve "data:," (tipico en iOS con fotos de 12 MP). El
+        # servidor esta bien: es la peticion la que viene vacia, asi que 400.
+        raise BadImage() from exc
 
 
 def _params(request):
@@ -116,7 +126,10 @@ def index(request):
 
 @require_POST
 def preview(request):
-    img, cols, rows, max_colors, name = _params(request)
+    try:
+        img, cols, rows, max_colors, name = _params(request)
+    except BadImage:
+        return JsonResponse({"error": "La imagen llego vacia."}, status=400)
     t0 = time.time()
     capacities = inv.get_capacities()
     mosaic = build_mosaic(
@@ -147,7 +160,10 @@ def preview(request):
 
 @require_POST
 def generate_pdf(request):
-    img, cols, rows, max_colors, name = _params(request)
+    try:
+        img, cols, rows, max_colors, name = _params(request)
+    except BadImage:
+        return JsonResponse({"error": "La imagen llego vacia."}, status=400)
     t0 = time.time()
     capacities = inv.get_capacities()
     mosaic = build_mosaic(
