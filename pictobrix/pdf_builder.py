@@ -32,6 +32,7 @@ PAGE_W, PAGE_H = A4
 BOARD_PAGE_W, BOARD_PAGE_H = A3
 BOARD_CELL = 0.8 * cm
 MARGIN = 32
+LOGO_MAX_H = 100
 
 _LOGO_PATH = os.path.join(os.path.dirname(__file__), "logo_mosaico_pixel.jpeg")
 
@@ -62,10 +63,17 @@ def _logo(c, top_y, page_w=None) -> float:
     """Dibuja el logo de Mosaico Pixel centrado; devuelve la Y inferior del bloque."""
     if page_w is None:
         page_w = PAGE_W
-    logo_h = 100
     with PILImage.open(_LOGO_PATH) as img:
         aspect = img.width / img.height
+    # El logo entra en una caja: manda el alto, salvo que sea tan ancho que se
+    # comiera los margenes (el encabezado es un banner de 3.6:1, y en A4 el
+    # ancho util es mas corto que en A3).
+    logo_h = LOGO_MAX_H
     logo_w = logo_h * aspect
+    max_w = page_w - 2 * MARGIN
+    if logo_w > max_w:
+        logo_w = max_w
+        logo_h = logo_w / aspect
     x = (page_w - logo_w) / 2
     y = top_y - logo_h
     c.drawImage(ImageReader(_LOGO_PATH), x, y, logo_w, logo_h, mask='auto')
