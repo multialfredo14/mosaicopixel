@@ -6,7 +6,7 @@ import json
 import os
 import sqlite3
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import FileResponse, HttpResponse, JsonResponse
@@ -27,6 +27,14 @@ if _DATA_DIR:
     _DB_PATH = os.path.join(_DATA_DIR, "stats.db")
 else:
     _DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "webapp", "stats.db")
+
+
+# Etiqueta de version de la esquina: fecha en que arranco este despliegue y el
+# commit que Railway construyo. Antes era un texto fijo en la plantilla y nadie
+# se acordaba de cambiarlo, asi que produccion parecia vieja aunque no lo fuera.
+_COMMIT = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")[:7]
+# La fecha va en hora local (UTC-5); en UTC de noche ya sale la de manana.
+VERSION = "v" + datetime.now(timezone(timedelta(hours=-5))).strftime("%Y.%m.%d") + (f" · {_COMMIT}" if _COMMIT else "")
 
 
 def _db():
@@ -120,7 +128,8 @@ def index(request):
     return render(
         request,
         "generator/index.html",
-        {"plate_cm": PLATE_CM, "plate": PLATE, "pieces_per_plate": PIECES_PER_PLATE},
+        {"plate_cm": PLATE_CM, "plate": PLATE, "pieces_per_plate": PIECES_PER_PLATE,
+         "version": VERSION},
     )
 
 
