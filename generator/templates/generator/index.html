@@ -281,10 +281,16 @@ let wantTab = 'prev';
 const MAX_SRC_PX = 2000;   // lado mayor de la foto que recibe el recortador
 const MAX_CROP_PX = 1600;  // lado mayor del recorte que se manda al servidor
 
-// El recorte se calcula una sola vez y lo reusan /preview y /generate. Antes
-// cada uno armaba su propio lienzo, y el segundo era justo el que se pasaba
-// del cupo: por eso la vista previa salia y el PDF no.
+// La imagen recortada se calcula una sola vez y la reusan /preview y /generate.
 let cropCache = null;
+
+// El recorte se guarda en pixeles de la foto (cropper.getData) y la imagen se
+// arma desde la foto, sin pasar por el cropper. El cropper mide su contenedor,
+// y en cuanto la vista previa lo saca de la pagina ese contenedor mide 0: en
+// iOS, al hacer scroll la barra de Safari cambia el alto de la ventana, el
+// cropper se "reajusta" a 0 px, borra el recorte y getCroppedCanvas devuelve
+// un lienzo vacio. Por eso la vista previa salia y el PDF no.
+let srcImg = null, cropData = null;
 
 // Vista en sala. Los numeros salen de medir la foto de referencia: un mosaico
 // de 51.2 x 76.8 cm ocupa ahi el 19.2% del ancho y su borde inferior queda al
@@ -345,7 +351,10 @@ function sync(){
   // asi que lo que ya estuviera armado deja de servir.
   lastPreview=null; cropCache=null;
   markPreset(); stats();
-  if(cropper) cropper.setAspectRatio(aspect());
+  // Con el cropper fuera de pantalla no se puede reajustar el recorte, asi que
+  // se vuelve al encuadre con uno nuevo en la proporcion nueva.
+  if(cropper && $('cropArea')) cropper.setAspectRatio(aspect());
+  else if(hasImage){ cropData=null; showCrop(srcImg.src); }
 }
 colsI.oninput=sync; rowsI.oninput=sync;
 $('oH').onclick=()=>{ if(+colsI.value<+rowsI.value){[colsI.value,rowsI.value]=[rowsI.value,colsI.value];} sync(); };
@@ -363,6 +372,7 @@ function loadFile(f){
   const rd=new FileReader();
   rd.onload=()=>{
     shrink(rd.result,MAX_SRC_PX,small=>{
+      cropData=null;
       showCrop(small);
       lastPreview=null; cropCache=null;
       hasImage=true; $('btnPrev').disabled=false; $('btnPdf').disabled=false;
@@ -385,6 +395,8 @@ function shrink(dataUrl,max,done){
       ctx.fillStyle='#fff'; ctx.fillRect(0,0,cv.width,cv.height);
       ctx.drawImage(img,0,0,cv.width,cv.height);
       const out=cv.toDataURL('image/jpeg',0.92);
+      // iOS no suelta la memoria de un lienzo hasta que lo achicas a 0.
+      cv.width=cv.height=0;
       done(out && out.length>1000 ? out : dataUrl);
     }catch(e){ done(dataUrl); }
   };
@@ -392,16 +404,26 @@ function shrink(dataUrl,max,done){
   img.src=dataUrl;
 }
 
+// Arma el cropper. Si ya habia un recorte guardado (volver a "Encuadre" despues
+// de la vista previa) lo restaura en vez de empezar de cero.
 function showCrop(dataUrl){
   selTab('crop');
+  if(!srcImg || srcImg.src!==dataUrl){ srcImg=new Image(); srcImg.src=dataUrl; }
   const stage=$('stage'); stage.innerHTML='';
   const div=document.createElement('div'); div.id='cropArea';
   const img=document.createElement('img'); img.id='src'; img.src=dataUrl;
   div.appendChild(img); stage.appendChild(div);
   if(cropper) cropper.destroy();
-  cropper=new Cropper(img,{aspectRatio:aspect(),viewMode:1,autoCropArea:1,background:false});
-  // Mover o acercar el recorte invalida el que estuviera guardado.
-  img.addEventListener('crop',()=>{cropCache=null;});
+  // checkOrientation apagado: el navegador ya endereza la foto al dibujarla, y
+  // si el cropper tambien la gira sus coordenadas no cuadran con las nuestras.
+  cropper=new Cropper(img,{aspectRatio:aspect(),viewMode:1,autoCropArea:1,
+    background:false,checkOrientation:false,data:cropData||undefined});
+  // Solo se toma el recorte mientras el cropper esta en pantalla; fuera de ella
+  // sus medidas son 0 y lo que reporta es basura.
+  img.addEventListener('crop',()=>{
+    if(!div.isConnected || !div.offsetWidth) return;
+    cropData=cropper.getData(true); cropCache=null;
+  });
 }
 
 function selTab(which){
@@ -409,7 +431,7 @@ function selTab(which){
   $('tabPrev').classList.toggle('sel',which==='prev');
   $('tabRoom').classList.toggle('sel',which==='room');
 }
-$('tabCrop').onclick=()=>{ if(hasImage){selTab('crop');} };
+$('tabCrop').onclick=()=>{ if(hasImage && !$('cropArea')){showCrop(srcImg.src);} };
 $('tabPrev').onclick=()=>{ if(lastPreview){renderPreview(lastPreview);} else if(hasImage){wantTab='prev';$('btnPrev').click();} };
 $('tabRoom').onclick=()=>{ if(lastPreview){renderRoom(lastPreview);} else if(hasImage){wantTab='room';$('btnPrev').click();} };
 
@@ -420,12 +442,29 @@ function croppedDataUrl(){
   let w=c*32*8, h=r*32*8;
   const f=MAX_CROP_PX/Math.max(w,h);
   if(f<1){ w=Math.round(w*f); h=Math.round(h*f); }
-  const canvas=cropper.getCroppedCanvas({width:w,height:h,
-    imageSmoothingQuality:'high',fillColor:'#fff'});
+  // Si el cropper sigue en pantalla, su recorte es el mas fresco.
+  if($('cropArea') && $('cropArea').offsetWidth) cropData=cropper.getData(true);
+  const d=cropData;
+  if(!d || !srcImg || !srcImg.naturalWidth || !(d.width>0) || !(d.height>0))
+    throw new Error('canvas-vacio');
+  const canvas=document.createElement('canvas');
+  canvas.width=w; canvas.height=h;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
+  ctx.imageSmoothingQuality='high';
+  // El recorte puede salirse de la foto (viewMode 1 lo permite en los bordes):
+  // se recorta la parte que cae dentro y lo demas queda en blanco.
+  const sx=Math.max(0,d.x), sy=Math.max(0,d.y);
+  const ex=Math.min(srcImg.naturalWidth,d.x+d.width), ey=Math.min(srcImg.naturalHeight,d.y+d.height);
+  if(ex>sx && ey>sy){
+    const kx=w/d.width, ky=h/d.height;
+    ctx.drawImage(srcImg,sx,sy,ex-sx,ey-sy,(sx-d.x)*kx,(sy-d.y)*ky,(ex-sx)*kx,(ey-sy)*ky);
+  }
   // JPEG y no PNG: la foto se reduce a 40 colores de todas formas, y en base64
   // pesa casi diez veces menos, que en datos moviles se nota.
-  const url=canvas&&canvas.toDataURL('image/jpeg',0.92);
-  if(!url||url.length<1000) throw new Error('canvas-vacio');
+  const url=canvas.toDataURL('image/jpeg',0.92);
+  canvas.width=canvas.height=0;
+  if(!url||!url.startsWith('data:image/')) throw new Error('canvas-vacio');
   cropCache=url;
   return url;
 }
@@ -456,11 +495,11 @@ $('btnPrev').onclick=async()=>{
   }catch(e){ $('stage').innerHTML=`<p class="hint">${errMsg(e,'armar la vista previa')}</p>`; }
 };
 
-// El navegador se queda sin memoria de lienzo antes que el servidor falle, y
-// eso hay que decirlo con algo accionable en vez de mandar a ver los logs.
+// Si no hay recorte que mandar hay que decirlo con algo accionable en vez de
+// mandar a ver los logs.
 function errMsg(e,que){
   return e && e.message==='canvas-vacio'
-    ? `Al navegador se le acabo la memoria al preparar la imagen. Recarga la pagina y prueba con una foto mas chica.`
+    ? `No se pudo preparar el recorte de la foto. Vuelve a "Encuadre", ajusta el recorte y prueba de nuevo.`
     : `No se pudo ${que}. Vuelve a intentarlo; si sigue igual, avisa.`;
 }
 
